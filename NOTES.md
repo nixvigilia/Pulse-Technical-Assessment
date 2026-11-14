@@ -1,7 +1,5 @@
 # Pulse — assessment notes
 
----
-
 ## Rules — Phase 1 (Make it run)
 
 ### 1. WebRTC ICE Failed / Connection Could Not Be Established
@@ -45,6 +43,31 @@ I changed the processing order in `lib/webrtc.ts`:
 
 - With two profiles on localhost, the connection now reaches the connected state after one user accepts the request.
 - The "Connection failed (network)" error no longer appears.
+
+### 2. Chat Messages Not Visible to the Other User
+
+**What was broken:**
+
+- After the connection was established, the sender could see their own messages, but the other user could not see them.
+
+**How I found it (Manual Testing):**
+
+- Opened two browser windows and completed the connect → accept flow.
+- Sent messages from both sides and checked if they appeared in both chat panels.
+
+**What caused the problem:**
+
+- In `lib/webrtc.ts`, `sendChat` sent messages with `t: "msg"`.
+- However, `wireDataChannel` only accepted messages with `t: "chat"`.
+- Because the message types did not match, incoming messages were ignored.
+
+**How I fixed it:**
+
+- Changed `sendChat` in `lib/webrtc.ts` to send messages with `t: "chat"` so it matches what the receiver expects.
+
+**Result:**
+
+- Both users can now see each other's messages in real time.
 
 ---
 
