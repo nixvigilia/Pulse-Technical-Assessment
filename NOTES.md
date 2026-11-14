@@ -69,6 +69,34 @@ I changed the processing order in `lib/webrtc.ts`:
 
 - Both users can now see each other's messages in real time.
 
+### 3. Reconnecting Shows "Request Declined" After Ending a Session
+
+**What was broken:**
+
+- User A and User B connect, then one of them ends the session.
+- When either user tries to connect to the same person again, the request is immediately declined even though nobody is in a session.
+
+**How I found it (Manual Testing):**
+
+- Opened two browser windows and tested: connect → accept → end connection → send another request to the same user.
+
+**What caused the problem:**
+
+- When a request was accepted, `app/api/signal/route.ts` set both users as `busy`.
+- When someone ended the session, the client sent an `end` message.
+- However, the server only cleared the `busy` status when it received a `decline` message, not an `end` message.
+- As a result, the other user was still marked as busy, so new requests were automatically declined.
+
+**How I fixed it:**
+
+- I asked Cursor to help identify why new connection requests were being declined after ending a session.
+- I reviewed its findings and checked the related code before applying the fix.
+- Updated `app/api/signal/route.ts` so signal type `end` clears `busy` for both peers, matching `decline`.
+
+**Result:**
+
+- After ending a session, both users can send a new connection request to each other without getting an automatic decline.
+
 ---
 
 ## Rules — Phase 2 (Make it good)
