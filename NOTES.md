@@ -97,6 +97,31 @@ I changed the processing order in `lib/webrtc.ts`:
 
 - After ending a session, both users can send a new connection request to each other without getting an automatic decline.
 
+### 4. Video Call – End Button Not Visible
+
+**What was broken:**
+
+- During a video call, the **End video** button could move below the visible screen, making it difficult or impossible to end the call.
+
+**How I found it (Manual Testing):**
+
+- Connected two browser profiles and started a video call.
+- Checked if the **End video** button stayed visible without scrolling.
+
+**What caused the problem:**
+
+- In `app/components/VideoPanel.tsx`, the video area could take up more space than available and push the control bar off-screen.
+- The chat panel also remained visible during video calls, taking up extra screen space.
+
+**How I fixed it:**
+
+- **`VideoPanel.tsx`:** Updated the layout to keep the video within the screen and keep the control bar at the bottom. Also added spacing for mobile screens.
+- **`app/page.tsx`:** Hide the chat panel while a video call is active. It becomes visible again after the call ends.
+
+**Result:**
+
+- The **End video** button now stays visible during calls on the tested desktop browsers (Chrome and Firefox).
+
 ---
 
 ## Rules — Phase 2 (Make it good)
