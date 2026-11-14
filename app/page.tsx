@@ -352,7 +352,7 @@ export default function Home() {
         />
       )}
 
-      {inChat && (
+      {inChat && video !== "active" && (
         <ChatPanel
           messages={messages}
           connected={conn.kind === "connected"}
