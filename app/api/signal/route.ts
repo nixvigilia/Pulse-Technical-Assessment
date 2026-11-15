@@ -2,6 +2,13 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { SignalType } from "@/lib/types";
 import { authorizePresence } from "@/lib/authorize-presence";
+import {
+  canAcceptConnection,
+  canEndCall,
+  canReceiveRequest,
+  canStartCall,
+  PRESENCE_STATUS,
+} from "@/lib/presence-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +20,8 @@ const VALID_TYPES: SignalType[] = [
   "offer",
   "answer",
   "ice",
+  "call-start",
+  "call-end",
   "end",
 ];
 
@@ -53,35 +62,157 @@ export async function POST(request: NextRequest) {
   const payloadStr = typeof payload === "string" ? payload : null;
 
   if (signalType === "request") {
-    const target = await prisma.presence.findUnique({
-      where: { id: toId },
-      select: { busy: true },
+    const allowed = await prisma.$transaction(async (tx) => {
+      const [target, from] = await Promise.all([
+        tx.presence.findUnique({
+          where: { id: toId },
+          select: { status: true },
+        }),
+        tx.presence.findUnique({
+          where: { id: fromId },
+          select: { status: true },
+        }),
+      ]);
+      if (
+        !target ||
+        !from ||
+        !canReceiveRequest(target.status) ||
+        !canReceiveRequest(from.status)
+      ) {
+        return false;
+      }
+      return true;
     });
-    if (!target) {
-      await sendDecline(toId, fromId);
-      return Response.json({ ok: true, autoDeclined: true });
-    }
-    if (target.busy) {
+    if (!allowed) {
       await sendDecline(toId, fromId);
       return Response.json({ ok: true, autoDeclined: true });
     }
   }
 
   if (signalType === "accept") {
-    await prisma.presence.updateMany({
-      where: { id: { in: [fromId, toId] } },
-      data: { busy: true },
+    const ok = await prisma.$transaction(async (tx) => {
+      const rows = await tx.presence.findMany({
+        where: { id: { in: [fromId, toId] } },
+        select: { id: true, status: true },
+      });
+      const fromRow = rows.find((r) => r.id === fromId);
+      const toRow = rows.find((r) => r.id === toId);
+      if (
+        !fromRow ||
+        !toRow ||
+        !canAcceptConnection(fromRow.status, toRow.status)
+      ) {
+        return false;
+      }
+      const updated = await tx.presence.updateMany({
+        where: {
+          id: { in: [fromId, toId] },
+          status: PRESENCE_STATUS.available,
+        },
+        data: { status: PRESENCE_STATUS.busy },
+      });
+      if (updated.count !== 2) return false;
+      await tx.presence.update({
+        where: { id: fromId },
+        data: { peerId: toId },
+      });
+      await tx.presence.update({
+        where: { id: toId },
+        data: { peerId: fromId },
+      });
+      return true;
     });
+    if (!ok) {
+      await sendDecline(toId, fromId);
+      return Response.json({ ok: true, autoDeclined: true });
+    }
   } else if (signalType === "decline" || signalType === "end") {
     await prisma.presence.updateMany({
       where: { id: { in: [fromId, toId] } },
-      data: { busy: false },
+      data: { status: PRESENCE_STATUS.available, peerId: null },
     });
+  } else if (signalType === "call-start") {
+    const transitioned = await prisma.$transaction(async (tx) => {
+      const rows = await tx.presence.findMany({
+        where: { id: { in: [fromId, toId] } },
+        select: { id: true, status: true, peerId: true },
+      });
+      const fromRow = rows.find((r) => r.id === fromId);
+      const toRow = rows.find((r) => r.id === toId);
+      if (
+        !fromRow ||
+        !toRow ||
+        fromRow.peerId !== toId ||
+        toRow.peerId !== fromId
+      ) {
+        return "deny" as const;
+      }
+      if (
+        fromRow.status === PRESENCE_STATUS.on_call &&
+        toRow.status === PRESENCE_STATUS.on_call
+      ) {
+        return "noop" as const;
+      }
+      if (!canStartCall(fromRow.status, toRow.status)) {
+        return "deny" as const;
+      }
+      const updated = await tx.presence.updateMany({
+        where: {
+          id: { in: [fromId, toId] },
+          status: PRESENCE_STATUS.busy,
+        },
+        data: { status: PRESENCE_STATUS.on_call },
+      });
+      return updated.count === 2 ? ("ok" as const) : ("deny" as const);
+    });
+    if (transitioned === "deny") {
+      return Response.json({ error: "call not allowed" }, { status: 409 });
+    }
+  } else if (signalType === "call-end") {
+    const transitioned = await prisma.$transaction(async (tx) => {
+      const rows = await tx.presence.findMany({
+        where: { id: { in: [fromId, toId] } },
+        select: { id: true, status: true, peerId: true },
+      });
+      const fromRow = rows.find((r) => r.id === fromId);
+      const toRow = rows.find((r) => r.id === toId);
+      if (
+        !fromRow ||
+        !toRow ||
+        fromRow.peerId !== toId ||
+        toRow.peerId !== fromId
+      ) {
+        return "deny" as const;
+      }
+      if (
+        fromRow.status === PRESENCE_STATUS.busy &&
+        toRow.status === PRESENCE_STATUS.busy
+      ) {
+        return "noop" as const;
+      }
+      if (!canEndCall(fromRow.status, toRow.status)) {
+        return "deny" as const;
+      }
+      const updated = await tx.presence.updateMany({
+        where: {
+          id: { in: [fromId, toId] },
+          status: PRESENCE_STATUS.on_call,
+        },
+        data: { status: PRESENCE_STATUS.busy },
+      });
+      return updated.count === 2 ? ("ok" as const) : ("deny" as const);
+    });
+    if (transitioned === "deny") {
+      return Response.json({ error: "call not allowed" }, { status: 409 });
+    }
   }
 
-  await prisma.signal.create({
-    data: { fromId, toId, type: signalType, payload: payloadStr },
-  });
+  // Video presence is reflected on the next poll; no mailbox delivery needed.
+  if (signalType !== "call-start" && signalType !== "call-end") {
+    await prisma.signal.create({
+      data: { fromId, toId, type: signalType, payload: payloadStr },
+    });
+  }
 
   return Response.json({ ok: true });
 }

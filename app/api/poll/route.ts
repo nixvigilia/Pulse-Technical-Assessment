@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { STALE_MS, SIGNAL_TTL_MS } from "@/lib/presence";
 import type { PollResponse } from "@/lib/types";
 import { authorizePresence } from "@/lib/authorize-presence";
+import { releasePartnersForPresenceIds } from "@/lib/presence-cleanup";
 import { SESSION_KEY_HEADER } from "@/lib/session-constants";
+import type { PresenceStatus } from "@/lib/presence-state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +34,15 @@ export async function GET(request: NextRequest) {
     data: { lastSeen: new Date(now) },
   });
 
-  await prisma.presence.deleteMany({ where: { lastSeen: { lt: staleCutoff } } });
+  const staleRows = await prisma.presence.findMany({
+    where: { lastSeen: { lt: staleCutoff } },
+    select: { id: true },
+  });
+  if (staleRows.length > 0) {
+    const staleIds = staleRows.map((r) => r.id);
+    await releasePartnersForPresenceIds(staleIds);
+    await prisma.presence.deleteMany({ where: { id: { in: staleIds } } });
+  }
   await prisma.signal.deleteMany({ where: { createdAt: { lt: signalCutoff } } });
 
   const peers = await prisma.presence.findMany({
@@ -40,7 +50,7 @@ export async function GET(request: NextRequest) {
       id: { not: id },
       lastSeen: { gte: staleCutoff },
     },
-    select: { id: true, lat: true, lng: true, busy: true },
+    select: { id: true, lat: true, lng: true, status: true },
   });
 
   const inbox = await prisma.signal.findMany({
@@ -58,7 +68,7 @@ export async function GET(request: NextRequest) {
       id: p.id,
       lat: p.lat,
       lng: p.lng,
-      busy: p.busy,
+      status: p.status as PresenceStatus,
     })),
     signals: inbox.map((s) => ({
       id: s.id,

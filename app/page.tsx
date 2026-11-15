@@ -8,6 +8,11 @@ import ChatPanel, { type ChatMessage } from "./components/ChatPanel";
 import VideoPanel from "./components/VideoPanel";
 import { join, leave, poll, sendSignal } from "@/lib/api";
 import { generateSessionSecret } from "@/lib/generate-session-secret";
+import {
+  forgetLiveSession,
+  leaveOrphanedLiveSessionFromStorage,
+  rememberLiveSession,
+} from "@/lib/session-lifecycle";
 import { PeerSession, type DescType, type PeerControl } from "@/lib/webrtc";
 import { POLL_INTERVAL_MS } from "@/lib/presence";
 import { type PeerDot, type SignalMsg } from "@/lib/types";
@@ -53,6 +58,27 @@ export default function Home() {
   const peerRef = useRef<PeerSession | null>(null);
   const msgId = useRef(0);
   const requestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const peerMissingPolls = useRef(0);
+
+  const liveSessionRef = useRef({
+    id: sessionId,
+    secret: sessionSecret,
+    phase: "gate" as "gate" | "live",
+  });
+  const connStateRef = useRef(conn);
+
+  useEffect(() => {
+    liveSessionRef.current = {
+      id: sessionId,
+      secret: sessionSecret,
+      phase,
+    };
+    connStateRef.current = conn;
+  }, [sessionId, sessionSecret, phase, conn]);
+
+  useEffect(() => {
+    leaveOrphanedLiveSessionFromStorage();
+  }, []);
 
   function showNotice(text: string) {
     setNotice(text);
@@ -75,6 +101,26 @@ export default function Home() {
     if (message) showNotice(message);
   }
 
+  function activePeerId(): string | null {
+    const c = connRef.current;
+    if (c.kind === "connecting" || c.kind === "connected") return c.peerId;
+    return null;
+  }
+
+  function notifyVideoActive() {
+    const peerId = activePeerId();
+    if (peerId) {
+      void sendSignal(sessionId, sessionSecret, peerId, "call-start");
+    }
+  }
+
+  function notifyVideoEnded() {
+    const peerId = activePeerId();
+    if (peerId) {
+      void sendSignal(sessionId, sessionSecret, peerId, "call-end");
+    }
+  }
+
   function startPeer(peerId: string, initiator: boolean) {
     const ps = new PeerSession(initiator, {
       onSignal: (type: DescType, payload: string) => {
@@ -84,8 +130,20 @@ export default function Home() {
       onControl: (ctrl) => handleControl(ctrl),
       onRemoteStream: (stream) => setRemoteStream(stream),
       onConnectionState: (state) => {
-        if (state === "failed") {
-          teardown("Connection failed (network).");
+        if (
+          state === "failed" ||
+          state === "disconnected" ||
+          state === "closed"
+        ) {
+          const c = connRef.current;
+          if (c.kind === "connecting" || c.kind === "connected") {
+            void sendSignal(sessionId, sessionSecret, c.peerId, "end");
+          }
+          teardown(
+            state === "failed"
+              ? "Connection failed (network)."
+              : "Stranger disconnected.",
+          );
         }
       },
       onChannelOpen: () => {
@@ -107,6 +165,7 @@ export default function Home() {
             .then((stream) => {
               setLocalStream(stream);
               setVideo("active");
+              notifyVideoActive();
             })
             .catch(() => {
               setVideo("none");
@@ -126,6 +185,7 @@ export default function Home() {
         setLocalStream(null);
         setRemoteStream(null);
         setVideo("none");
+        notifyVideoEnded();
         break;
     }
   }
@@ -188,6 +248,7 @@ export default function Home() {
         setLocalStream(stream);
         ps.sendControl("video-accept");
         setVideo("active");
+        notifyVideoActive();
       })
       .catch(() => {
         ps.sendControl("video-decline");
@@ -205,6 +266,7 @@ export default function Home() {
     const ps = peerRef.current;
     ps?.stopVideo();
     ps?.sendControl("video-end");
+    notifyVideoEnded();
     setLocalStream(null);
     setRemoteStream(null);
     setVideo("none");
@@ -282,6 +344,23 @@ export default function Home() {
         const data = await poll(sessionId, sessionSecret);
         if (!active) return;
         setPeers(data.peers);
+
+        const c = connRef.current;
+        if (c.kind === "connecting" || c.kind === "connected") {
+          const stillOnMap = data.peers.some((p) => p.id === c.peerId);
+          if (!stillOnMap) {
+            peerMissingPolls.current += 1;
+            if (peerMissingPolls.current >= 2) {
+              peerMissingPolls.current = 0;
+              teardown("Stranger left.");
+            }
+          } else {
+            peerMissingPolls.current = 0;
+          }
+        } else {
+          peerMissingPolls.current = 0;
+        }
+
         for (const s of data.signals) processSignalRef.current(s);
       } catch {}
       if (active) timer = setTimeout(tick, POLL_INTERVAL_MS);
@@ -295,19 +374,24 @@ export default function Home() {
   }, [phase, sessionId, sessionSecret]);
 
   useEffect(() => {
-    if (!sessionId || phase !== "live") return;
-    const onLeave = () => leave(sessionId, sessionSecret);
-    window.addEventListener("pagehide", onLeave);
-    window.addEventListener("beforeunload", onLeave);
-    return () => {
-      window.removeEventListener("pagehide", onLeave);
-      window.removeEventListener("beforeunload", onLeave);
+    const onPageHide = () => {
+      const { id, secret, phase: p } = liveSessionRef.current;
+      if (p !== "live") return;
+      const c = connStateRef.current;
+      if (c.kind === "connecting" || c.kind === "connected") {
+        void sendSignal(id, secret, c.peerId, "end");
+      }
+      leave(id, secret);
+      forgetLiveSession();
     };
-  }, [sessionId, sessionSecret, phase]);
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
+  }, []);
 
   async function handleReady(lat: number, lng: number) {
     setMyLocation({ lat, lng });
     await join(sessionId, sessionSecret, lat, lng);
+    rememberLiveSession(sessionId, sessionSecret);
     setPhase("live");
   }
 
@@ -322,7 +406,7 @@ export default function Home() {
       <WorldMap
         peers={peers}
         me={myLocation}
-        onPeerClick={requestConnection}
+        onPeerConnect={requestConnection}
         canConnect={conn.kind === "idle"}
       />
 
