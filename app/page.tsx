@@ -543,6 +543,15 @@ export default function Home() {
           setMatchBusy(true);
           try {
             await matchAction(sessionId, sessionSecret, "accept");
+            setMatch((m) =>
+              m.phase === "pending" && !m.youAccepted
+                ? {
+                    ...m,
+                    youAccepted: true,
+                    acceptedCount: Math.min(2, m.acceptedCount + 1),
+                  }
+                : m,
+            );
           } finally {
             setMatchBusy(false);
           }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "@/lib/language-options";
 import type { MatchSnapshot, SessionPreferences } from "@/lib/types";
 
@@ -11,6 +11,80 @@ const EMPTY_PREFS: SessionPreferences = {
 };
 
 type GenderPref = "anyone" | "men" | "women";
+
+const SEARCH_WAIT_MESSAGES = [
+  "Good conversations can start with a stranger…",
+  "Somewhere out there, someone is looking to chat too…",
+  "A new connection might be just around the corner…",
+  "Every stranger has a story to tell…",
+  "Maybe your next favorite conversation starts here…",
+  "Making the world feel a little smaller…",
+  "Someone new is just a hello away…",
+  "Great conversations happen unexpectedly…",
+] as const;
+
+const SEARCH_MSG_HOLD_MS = 3500;
+const SEARCH_MSG_FADE_MS = 320;
+
+function SearchPulse() {
+  return (
+    <div className="mb-3 flex items-center justify-center gap-1.5" aria-hidden>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="search-wait-dot size-2 rounded-full bg-emerald-400/75"
+          style={{ animationDelay: `${i * 0.22}s` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function RotatingSearchMessage() {
+  const [index, setIndex] = useState(() =>
+    Math.floor(Math.random() * SEARCH_WAIT_MESSAGES.length),
+  );
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let holdTimer: ReturnType<typeof setTimeout>;
+    let fadeTimer: ReturnType<typeof setTimeout>;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      holdTimer = setTimeout(() => {
+        if (cancelled) return;
+        setFading(true);
+        fadeTimer = setTimeout(() => {
+          if (cancelled) return;
+          setIndex((i) => (i + 1) % SEARCH_WAIT_MESSAGES.length);
+          setFading(false);
+          scheduleNext();
+        }, SEARCH_MSG_FADE_MS);
+      }, SEARCH_MSG_HOLD_MS);
+    };
+
+    scheduleNext();
+    return () => {
+      cancelled = true;
+      clearTimeout(holdTimer);
+      clearTimeout(fadeTimer);
+    };
+  }, []);
+
+  return (
+    <p
+      role="status"
+      aria-live="polite"
+      className={`min-h-[2.75rem] text-center leading-snug text-zinc-300 transition-opacity duration-300 ease-in-out ${
+        fading ? "opacity-0" : "opacity-100"
+      }`}
+    >
+      {SEARCH_WAIT_MESSAGES[index]}
+    </p>
+  );
+}
 export default function RandomConnect({
   open,
   onClose,
@@ -57,14 +131,25 @@ export default function RandomConnect({
     wasOpen.current = open;
   }, [open, preferences]);
 
-  const countdown = useMemo(() => {
-    if (!match.expiresAt) return null;
-    const left = Math.max(
-      0,
-      Math.ceil((new Date(match.expiresAt).getTime() - Date.now()) / 1000),
-    );
-    return left;
-  }, [match.expiresAt]);
+  const [acceptSecondsLeft, setAcceptSecondsLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (match.phase !== "pending" || !match.expiresAt) {
+      setAcceptSecondsLeft(null);
+      return;
+    }
+    const expiresAt = match.expiresAt;
+    const tick = () => {
+      const left = Math.max(
+        0,
+        Math.ceil(new Date(expiresAt).getTime() - Date.now()) / 1000,
+      );
+      setAcceptSecondsLeft(left);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [match.phase, match.expiresAt]);
 
   if (!open) return null;
 
@@ -127,7 +212,7 @@ export default function RandomConnect({
             )}
             <p className="mt-1 text-amber-200/80">
               {match.acceptedCount}/2 accepted
-              {countdown !== null && ` · ${countdown}s left`}
+              {acceptSecondsLeft !== null && ` · ${acceptSecondsLeft}s left`}
             </p>
             <div className="mt-3 flex gap-2">
               {!match.youAccepted && (
@@ -167,14 +252,15 @@ export default function RandomConnect({
 
         {match.phase === "searching" && (
           <div className="mb-4 rounded-xl border border-zinc-600 bg-zinc-800/50 p-4 text-sm">
-            <p>Finding someone who shares a spoken language…</p>
+            <SearchPulse />
+            <RotatingSearchMessage />
             <button
               type="button"
               disabled={busy}
               onClick={() => void onCancel()}
               className="mt-3 w-full rounded-full border border-zinc-500 py-2 text-sm hover:bg-zinc-800 disabled:opacity-50"
             >
-              Cancel search
+              Cancel
             </button>
           </div>
         )}
