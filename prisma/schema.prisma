@@ -11,15 +11,23 @@ datasource db {
   provider = "postgresql"
 }
 
+enum PresenceStatus {
+  available
+  busy
+  on_call
+}
+
 model Presence {
-  id         String   @id // client-generated session uuid (public on the map)
+  id         String         @id // client-generated session uuid (public on the map)
   secretHash String // SHA-256 of tab-only session secret (never sent in poll peers)
   lat        Float // ALREADY privacy-offset coords (raw is never stored)
   lng        Float
-  busy       Boolean  @default(false) // true while in an active connection
+  status     PresenceStatus @default(available)
+  peerId     String? // active connection partner (never sent in poll peers)
   lastSeen   DateTime
 
   @@index([lastSeen])
+  @@index([peerId])
 }
 
 model Signal {

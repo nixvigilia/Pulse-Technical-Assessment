@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authorizePresence } from "@/lib/authorize-presence";
+import { releasePartnersForPresenceIds } from "@/lib/presence-cleanup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "unauthorized" }, { status: 403 });
   }
 
+  await releasePartnersForPresenceIds([id]);
   await prisma.signal.deleteMany({
     where: { OR: [{ toId: id }, { fromId: id }] },
   });

@@ -75,6 +75,26 @@ export default function Home() {
     if (message) showNotice(message);
   }
 
+  function activePeerId(): string | null {
+    const c = connRef.current;
+    if (c.kind === "connecting" || c.kind === "connected") return c.peerId;
+    return null;
+  }
+
+  function notifyVideoActive() {
+    const peerId = activePeerId();
+    if (peerId) {
+      void sendSignal(sessionId, sessionSecret, peerId, "call-start");
+    }
+  }
+
+  function notifyVideoEnded() {
+    const peerId = activePeerId();
+    if (peerId) {
+      void sendSignal(sessionId, sessionSecret, peerId, "call-end");
+    }
+  }
+
   function startPeer(peerId: string, initiator: boolean) {
     const ps = new PeerSession(initiator, {
       onSignal: (type: DescType, payload: string) => {
@@ -85,6 +105,10 @@ export default function Home() {
       onRemoteStream: (stream) => setRemoteStream(stream),
       onConnectionState: (state) => {
         if (state === "failed") {
+          const c = connRef.current;
+          if (c.kind === "connecting" || c.kind === "connected") {
+            void sendSignal(sessionId, sessionSecret, c.peerId, "end");
+          }
           teardown("Connection failed (network).");
         }
       },
@@ -107,6 +131,7 @@ export default function Home() {
             .then((stream) => {
               setLocalStream(stream);
               setVideo("active");
+              notifyVideoActive();
             })
             .catch(() => {
               setVideo("none");
@@ -126,6 +151,7 @@ export default function Home() {
         setLocalStream(null);
         setRemoteStream(null);
         setVideo("none");
+        notifyVideoEnded();
         break;
     }
   }
@@ -188,6 +214,7 @@ export default function Home() {
         setLocalStream(stream);
         ps.sendControl("video-accept");
         setVideo("active");
+        notifyVideoActive();
       })
       .catch(() => {
         ps.sendControl("video-decline");
@@ -205,6 +232,7 @@ export default function Home() {
     const ps = peerRef.current;
     ps?.stopVideo();
     ps?.sendControl("video-end");
+    notifyVideoEnded();
     setLocalStream(null);
     setRemoteStream(null);
     setVideo("none");
@@ -322,7 +350,7 @@ export default function Home() {
       <WorldMap
         peers={peers}
         me={myLocation}
-        onPeerClick={requestConnection}
+        onPeerConnect={requestConnection}
         canConnect={conn.kind === "idle"}
       />
 
