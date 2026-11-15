@@ -142,7 +142,7 @@ export default function RandomConnect({
     const tick = () => {
       const left = Math.max(
         0,
-        Math.ceil(new Date(expiresAt).getTime() - Date.now()) / 1000,
+        Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000),
       );
       setAcceptSecondsLeft(left);
     };
@@ -157,6 +157,13 @@ export default function RandomConnect({
     match.phase === "searching" || match.phase === "pending";
 
   const canJoin = spoken.length > 0;
+
+  async function handleClose() {
+    if (inQueue && !busy) {
+      await onCancel();
+    }
+    onClose();
+  }
 
   async function handleSaveAndMaybeJoin(join: boolean) {
     const genderVal =
@@ -193,8 +200,9 @@ export default function RandomConnect({
           <PanelTitle match={match} />
           <button
             type="button"
-            onClick={onClose}
-            className="rounded-full border border-zinc-600 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-500"
+            disabled={busy && inQueue}
+            onClick={() => void handleClose()}
+            className="rounded-full border border-zinc-600 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-500 disabled:opacity-50"
           >
             Close
           </button>
