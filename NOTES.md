@@ -153,6 +153,100 @@ I changed the processing order in `lib/webrtc.ts`:
 
 ## Rules — Phase 3 (Make it secure)
 
+Full write-up: `docs/security-review.md`. Below is what I found, how I ranked it, and what I could reproduce locally.
+
+### Main issue (SEC-001) — session id is the only “password”
+
+- Each user gets a random **session id** (UUID). The map **poll** returns every online user’s id in `peers` so dots can render.
+- The API (`/api/join`, `/api/poll`, `/api/signal`, `/api/leave`) **does not check anything else** — no login, no secret. If your request includes someone’s id, the server treats you as that person.
+- That is a **global design issue** (localhost and Vercel), not something caused by using two browsers on one PC. Any HTTP client (`fetch`, curl, Postman, a script) can call the same endpoints with the same JSON the app uses.
+- **Chat text is not on the server** (WebRTC peer-to-peer). The risk is **impersonation**: read or delete another user’s **signaling mailbox** (`request`, `accept`, `offer`, etc.) and eventually complete the call **as them**, so messages go to the attacker instead of the victim. I did not implement a fix yet (assessment was review-first).
+
+**How I think about it (simple):** public room number on a lobby board, but the hotel also uses that number as your ID card — anyone who sees the board can pretend to be you at the desk.
+
+### What I reproduced locally
+
+Two **SEC-001** checks in the browser, in this order: **(1) fake `request`**, then **(2) `leave`** to kick someone off the map. I did **not** manually reproduce mailbox `poll` theft or `accept`/`end` impersonation (same root cause — see `docs/security-review.md`).
+
+**Setup**
+
+- Two windows on the map (different mock locations in DevTools → Sensors).
+- Confirmed session ids are public: Network → `poll` → Response → `peers` includes each dot’s `id`.
+
+**1. Fake `request` (reproduced)**
+
+- DevTools **Console** on `localhost:3000` (replace ids with your two session ids from `poll` / `peers`):
+
+```javascript
+fetch("/api/signal", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    fromId: "STRANGER_1",
+    toId: "STRANGER_2",
+    type: "request",
+  }),
+});
+```
+
+**Same call in Postman (optional)**
+
+| Field             | Value                                                                 |
+| ----------------- | --------------------------------------------------------------------- |
+| Method            | `POST`                                                                |
+| URL               | `http://localhost:3000/api/signal`                                    |
+| Headers           | `Content-Type: application/json`                                      |
+| Body → raw → JSON | `{ "fromId": "STRANGER_1", "toId": "STRANGER_2", "type": "request" }` |
+
+Postman hits the same public API as the browser. **Before the SEC-001 fix**, these bodies worked with ids only; **after the fix** they return **`403`** unless you include the victim’s tab secret (which attackers should not have). On a deployed app use your Vercel URL instead of `localhost`. For **`leave`**: body `{ "id", "secret" }`.
+
+- `fromId` = sender, `toId` = receiver, `type: "request"`. The other window showed the connection prompt within ~1.5s — same as tapping a dot, but without using the map UI (console or Postman).
+- This shows the server trusts ids in JSON with **no secret**; console is not a special bypass — it is the same API as `lib/api.ts` `sendSignal`.
+
+**2. `leave` as another user — kick off map (reproduced)**
+
+- Tested **after** the fake request. Removes their **presence** row (dot disappears for everyone). Not the same as **End chat** — that uses `signal` type `end`.
+- DevTools **Console** — `id` = the victim’s session id from `peers` (not your own):
+
+```javascript
+fetch("/api/leave", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ id: "STRANGER_2" }),
+})
+  .then((r) => r.json().then((j) => ({ status: r.status, body: j })))
+  .then(console.log);
+```
+
+- Got **`status: 200`**, **`body: { ok: true }`**. On the **other** window’s map, their dot was gone within ~1–2s (`peers` no longer listed them). Victim’s tab can still show the local **“Me”** pin until they refresh — server-side they were removed.
+- Same issue: knowing their public id is enough; no secret required (`lib/api.ts` `leave`).
+
+### What I fixed (SEC-001 — partial)
+
+- **Session secret:** each tab generates a random secret (memory only). Server stores `secretHash` on `Presence` (`prisma/schema.prisma`).
+- **API auth:** `/api/join`, `/api/poll`, `/api/signal`, `/api/leave` require the secret (`body.secret` or header `X-Pulse-Session-Key` on poll). Wrong or missing secret → **`403 unauthorized`**.
+- **Client:** `lib/api.ts` + `app/page.tsx` send the secret on every call; `leave` beacon includes `{ id, secret }`.
+- **Re-test:** old Postman/console calls with **only** ids (no secret) should fail. Map + connect must still work in two normal windows.
+- **DB:** run `npx prisma db push` locally (drop/empty `Presence` if the migration complains about existing rows). Not fixed yet: SEC-002–004 (see below).
+
+### Ranking (short)
+
+| Priority               | ID              | Issue                                                                                            |
+| ---------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
+| Must fix before launch | SEC-001         | Public id = API credential → **fixed (secret)**; reproduced before fix: fake `request` + `leave` |
+| Must fix before launch | SEC-002         | `busy` and signals not tied to a real connection pair                                            |
+| Must fix before launch | SEC-003         | Tab close leaves partner stuck `busy`                                                            |
+| Must fix before launch | SEC-004         | No rate limits / abuse caps on anonymous API                                                     |
+| Important after        | SEC-005–SEC-010 | Raw GPS on client pin, cleanup, headers, Mapbox token, Next upgrade, etc.                        |
+
+Details and remediation phases are in `docs/security-review.md`.
+
+### What I would fix next (not implemented yet)
+
+- Record an active **connection pair** server-side so `accept` / WebRTC signals are only allowed between those two ids.
+- On **leave** / stale cleanup, clear the **partner’s** `busy` flag and send `end` to them.
+- **Rate limit** `/api/*` at the edge (e.g. Vercel Firewall) + cap request body size.
+
 ---
 
 ## Rules — Phase 4 (Make it better)
