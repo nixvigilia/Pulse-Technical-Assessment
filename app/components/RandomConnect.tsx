@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { LANGUAGE_OPTIONS } from "@/lib/language-options";
+import { MATCH_ACCEPT_MS } from "@/lib/match";
 import type { MatchSnapshot, SessionPreferences } from "@/lib/types";
 
 const EMPTY_PREFS: SessionPreferences = {
@@ -26,16 +27,68 @@ const SEARCH_WAIT_MESSAGES = [
 const SEARCH_MSG_HOLD_MS = 3500;
 const SEARCH_MSG_FADE_MS = 320;
 
-function SearchPulse() {
+function WaitDots({
+  className = "bg-emerald-400/75",
+  size = "size-2",
+}: {
+  className?: string;
+  size?: string;
+}) {
   return (
-    <div className="mb-3 flex items-center justify-center gap-1.5" aria-hidden>
+    <>
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="search-wait-dot size-2 rounded-full bg-emerald-400/75"
+          className={`search-wait-dot ${size} rounded-full ${className}`}
           style={{ animationDelay: `${i * 0.22}s` }}
         />
       ))}
+    </>
+  );
+}
+
+function SearchPulse() {
+  return (
+    <div
+      className="mb-3 flex items-center justify-center gap-1.5"
+      aria-hidden
+    >
+      <WaitDots />
+    </div>
+  );
+}
+
+function MatchAcceptExpiryLine({ expiresAt }: { expiresAt: string }) {
+  const [remainingRatio, setRemainingRatio] = useState(1);
+
+  useEffect(() => {
+    const endMs = new Date(expiresAt).getTime();
+    const startMs = endMs - MATCH_ACCEPT_MS;
+    const tick = () => {
+      const span = endMs - startMs;
+      const left = Math.max(0, endMs - Date.now());
+      setRemainingRatio(span > 0 ? left / span : 0);
+    };
+    tick();
+    const id = setInterval(tick, 100);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+
+  const pct = Math.round(remainingRatio * 100);
+
+  return (
+    <div
+      className="mt-3 h-0.5 w-full overflow-hidden rounded-full bg-amber-950/60"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={pct}
+      aria-label="Time left to accept"
+    >
+      <div
+        className="h-full rounded-full bg-amber-300/90 transition-[width] duration-100 ease-linear"
+        style={{ width: `${remainingRatio * 100}%` }}
+      />
     </div>
   );
 }
@@ -131,26 +184,6 @@ export default function RandomConnect({
     wasOpen.current = open;
   }, [open, preferences]);
 
-  const [acceptSecondsLeft, setAcceptSecondsLeft] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (match.phase !== "pending" || !match.expiresAt) {
-      setAcceptSecondsLeft(null);
-      return;
-    }
-    const expiresAt = match.expiresAt;
-    const tick = () => {
-      const left = Math.max(
-        0,
-        Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000),
-      );
-      setAcceptSecondsLeft(left);
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [match.phase, match.expiresAt]);
-
   if (!open) return null;
 
   const inQueue =
@@ -211,50 +244,33 @@ export default function RandomConnect({
         {match.phase === "pending" && (
           <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
             <p className="font-medium text-amber-100">Match found — accept to connect</p>
-            {match.language && (
-              <p className="mt-1 text-xs text-amber-200/70">
-                Shared language:{" "}
-                {LANGUAGE_OPTIONS.find((l) => l.code === match.language)?.label ??
-                  match.language}
+            {match.expiresAt && (
+              <MatchAcceptExpiryLine expiresAt={match.expiresAt} />
+            )}
+            {!match.youAccepted ? (
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void onAccept()}
+                  className="flex-1 rounded-full bg-emerald-400 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void onDecline()}
+                  className="flex-1 rounded-full border border-zinc-600 py-2 text-sm hover:border-zinc-500 disabled:opacity-50"
+                >
+                  Decline
+                </button>
+              </div>
+            ) : (
+              <p className="mt-3 text-center text-xs text-amber-100/90">
+                Waiting for the other person…
               </p>
             )}
-            <p className="mt-1 text-amber-200/80">
-              {match.acceptedCount}/2 accepted
-              {acceptSecondsLeft !== null && ` · ${acceptSecondsLeft}s left`}
-            </p>
-            <div className="mt-3 flex gap-2">
-              {!match.youAccepted && (
-                <>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void onAccept()}
-                    className="flex-1 rounded-full bg-emerald-400 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
-                  >
-                    Accept
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void onDecline()}
-                    className="flex-1 rounded-full border border-zinc-600 py-2 text-sm hover:border-zinc-500 disabled:opacity-50"
-                  >
-                    Decline
-                  </button>
-                </>
-              )}
-              {match.youAccepted && (
-                <p className="text-amber-100/90">Waiting for the other person…</p>
-              )}
-            </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void onCancel()}
-              className="mt-2 w-full text-xs text-zinc-400 underline hover:text-zinc-300"
-            >
-              Cancel
-            </button>
           </div>
         )}
 
@@ -262,14 +278,6 @@ export default function RandomConnect({
           <div className="mb-4 rounded-xl border border-zinc-600 bg-zinc-800/50 p-4 text-sm">
             <SearchPulse />
             <RotatingSearchMessage />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void onCancel()}
-              className="mt-3 w-full rounded-full border border-zinc-500 py-2 text-sm hover:bg-zinc-800 disabled:opacity-50"
-            >
-              Cancel
-            </button>
           </div>
         )}
 
