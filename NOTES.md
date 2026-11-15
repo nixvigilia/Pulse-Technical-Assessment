@@ -145,6 +145,37 @@ I changed the processing order in `lib/webrtc.ts`:
 
 - When someone leaves, their dot disappears after roughly `STALE_MS` without another open tab refreshing their row.
 
+### 6. Partner still connected after the other user refreshes
+
+**Branch:** `fix/refresh-partner-stays-connected`
+
+**What was broken:**
+
+- User A and User B are in an active chat (or video).
+- User A refreshes the browser → they see **Enter Pulse** again and get a **new** session id.
+- User B still sees the chat / call as connected to A’s **old** session; messages and UI act like nothing ended.
+
+**How I found it (Manual Testing):**
+
+- Two browser windows: connect → accept → refresh one window.
+- Refreshed window returns to the gate; the other window keeps the chat open.
+
+**What caused the problem:**
+
+1. **Refresh ≠ tab close:** A new React tree gets a new `sessionId`. The `pagehide` handler was re-registered per phase and **removed in `useEffect` cleanup** before the browser fired `pagehide`, so `leave` often never ran for the old session.
+2. **Partner had no fallback:** If the leaver never hit `/api/leave`, the survivor relied only on a slow stale reap. The client did not tear down when the partner’s dot disappeared or when WebRTC moved to `disconnected` / `closed`.
+
+**How I fixed it:**
+
+- **`lib/session-lifecycle.ts`:** While live, stash `{ id, secret }` in `sessionStorage`. On the **next** page load, beacon **`/api/leave`** for that orphaned session (covers refresh when `pagehide` missed).
+- **`app/page.tsx`:** Register `pagehide` once via refs (not torn down on unmount); on hide, send `end` if in a call, then `leave` + clear storage.
+- **`app/page.tsx`:** After poll, if connected to a `peerId` not in `peers` for two ticks (~3s), run local `teardown`.
+- **`app/page.tsx`:** In `onConnectionState`, treat WebRTC `disconnected` and `closed` like `failed` so the survivor exits quickly.
+
+**Result:**
+
+- Refreshing ends coordination for the old session and the other user’s UI should close within a poll or two, or when the peer connection drops.
+
 ---
 
 ## Rules — Phase 2 (Make it good)
