@@ -1,27 +1,34 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { authorizePresence } from "@/lib/authorize-presence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// POST /api/leave — body { id }. Removes the presence row and any pending
-// signals to/from this user. Called via navigator.sendBeacon on tab close, so
-// the body may arrive as text — parse defensively.
+// POST /api/leave — body { id, secret }. Called via sendBeacon on tab close.
 export async function POST(request: NextRequest) {
   let id: string | undefined;
+  let secret: string | undefined;
   try {
     const text = await request.text();
-    id = text ? (JSON.parse(text)?.id as string | undefined) : undefined;
+    if (text) {
+      const parsed = JSON.parse(text) as { id?: unknown; secret?: unknown };
+      id = typeof parsed.id === "string" ? parsed.id : undefined;
+      secret = typeof parsed.secret === "string" ? parsed.secret : undefined;
+    }
   } catch {
     id = undefined;
+    secret = undefined;
   }
 
   if (typeof id !== "string" || !id) {
     return Response.json({ error: "invalid id" }, { status: 400 });
   }
 
-  // Independent cleanup deletes — no atomicity needed (and interactive
-  // transactions are unreliable over a PgBouncer pooler).
+  if (!(await authorizePresence(id, secret))) {
+    return Response.json({ error: "unauthorized" }, { status: 403 });
+  }
+
   await prisma.signal.deleteMany({
     where: { OR: [{ toId: id }, { fromId: id }] },
   });
