@@ -180,6 +180,31 @@ I changed the processing order in `lib/webrtc.ts`:
 
 ## Rules — Phase 2 (Make it good)
 
+### 1. Map dots — green and amber only
+
+**What was confusing:**
+
+- The map used three dot colors: green (available), amber (in text chat), and blue (on a video call).
+- Amber and blue both meant “do not tap — already occupied.” Blue only told you *how* they were occupied (chat vs video), which does not change whether you can send a new connection request.
+
+**What I changed:**
+
+- **Map UX:** Two colors only:
+  - **Green** — Available
+  - **Amber** — Unavailable – Already in a conversation or video call.
+- **`lib/presence-state.ts`:** `presenceMarkerClass` and `presenceSwatchClass` map everything that is not `available` to the same amber styling; tooltips and the stranger card use the shared unavailable label.
+- **`app/globals.css`:** Removed blue `.pulse-dot--on-call` styles; unavailable dots use `.pulse-dot--unavailable` (same amber pulse as before).
+- **`app/components/WorldMap.tsx`:** Disabled **Request** tooltip uses the same unavailable copy when the peer is busy or on a call.
+- **`lib/presence-state.test.ts`:** Asserts green vs amber visuals and label text.
+
+**What stayed the same (on purpose):**
+
+- The server still stores `available`, `busy`, and `on_call` on `Presence.status` so video can move both peers to `on_call` and back to `busy` when the call ends (`app/api/signal/route.ts`). Only the **globe** collapses chat and video into one amber state.
+
+**Result:**
+
+- The map reads at a glance: open to connect (green) or not (amber), without a third color that duplicated “unavailable.”
+
 ---
 
 ## Rules — Phase 3 (Make it secure)

@@ -9,10 +9,13 @@ export const PRESENCE_STATUS = {
 export type PresenceStatus =
   (typeof PRESENCE_STATUS)[keyof typeof PRESENCE_STATUS];
 
+const UNAVAILABLE_LABEL =
+  "Unavailable – Already in a conversation or video call.";
+
 export const PRESENCE_LABEL: Record<PresenceStatus, string> = {
   available: "Available",
-  busy: "Busy",
-  on_call: "On a call",
+  busy: UNAVAILABLE_LABEL,
+  on_call: UNAVAILABLE_LABEL,
 };
 
 export function isValidPresenceStatus(value: unknown): value is PresenceStatus {
@@ -28,27 +31,17 @@ export function canReceiveRequest(status: PresenceStatus): boolean {
   return status === PRESENCE_STATUS.available;
 }
 
-/** Map marker / preview styling key. */
+/** Map marker / preview styling key. Chat and video both render as amber. */
 export function presenceSwatchClass(status: PresenceStatus): string {
-  switch (status) {
-    case PRESENCE_STATUS.available:
-      return "bg-emerald-400 pulse-status-swatch--available";
-    case PRESENCE_STATUS.busy:
-      return "bg-amber-400";
-    case PRESENCE_STATUS.on_call:
-      return "bg-sky-400 pulse-status-swatch--on-call";
-  }
+  return canReceiveRequest(status)
+    ? "bg-emerald-400 pulse-status-swatch--available"
+    : "bg-amber-400";
 }
 
 export function presenceMarkerClass(status: PresenceStatus): string {
-  switch (status) {
-    case PRESENCE_STATUS.available:
-      return "pulse-dot pulse-dot--available";
-    case PRESENCE_STATUS.busy:
-      return "pulse-dot pulse-dot--busy";
-    case PRESENCE_STATUS.on_call:
-      return "pulse-dot pulse-dot--on-call";
-  }
+  return canReceiveRequest(status)
+    ? "pulse-dot pulse-dot--available"
+    : "pulse-dot pulse-dot--unavailable";
 }
 
 /**
