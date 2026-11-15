@@ -122,6 +122,29 @@ I changed the processing order in `lib/webrtc.ts`:
 
 - The **End video** button now stays visible during calls on the tested desktop browsers (Chrome and Firefox).
 
+### 5. Ghost dots on the map (stale presence)
+
+**What was broken:**
+
+- After a user closed their tab, their dot could stay on the map for a long time, so the map looked busy when nobody was still there (same idea as the README example).
+
+**How I found it (Manual Testing):**
+
+- Opened two browser windows, joined the map, closed one tab, and watched the other window’s map for about 15–20 seconds.
+
+**What caused the problem:**
+
+- Each poll called `updateMany({ where: {} })`, which refreshed `lastSeen` for **every** presence row.
+- Any user who kept polling kept everyone else “alive” for `STALE_MS` in `lib/presence.ts`, even if they had already left.
+
+**How I fixed it:**
+
+- In `app/api/poll/route.ts`, heartbeat only updates the caller: `where: { id }`.
+
+**Result:**
+
+- When someone leaves, their dot disappears after roughly `STALE_MS` without another open tab refreshing their row.
+
 ---
 
 ## Rules — Phase 2 (Make it good)
