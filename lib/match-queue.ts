@@ -281,7 +281,7 @@ export async function enrichMatchSnapshot(
     ...base,
     acceptedCount,
     youAccepted: row.matchAccepted,
-    peerId: null,
+    peerId: row.matchPartnerId,
   };
 }
 

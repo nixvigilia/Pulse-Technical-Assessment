@@ -399,6 +399,13 @@ export default function Home() {
         ) {
           showNotice("Match expired.");
         }
+        if (
+          next.phase === "pending" &&
+          next.peerId &&
+          prev !== "pending"
+        ) {
+          setMapFocusPeerId(next.peerId);
+        }
         prevMatchPhase.current = next.phase;
         matchPhaseRef.current = next.phase;
         setMatch(next);
@@ -475,6 +482,12 @@ export default function Home() {
     conn.kind === "connecting" || conn.kind === "connected" ? conn.peerId : null;
   const mapConnectIdle =
     conn.kind === "idle" && match.phase === "idle";
+  const mapLinkPeerId =
+    connectedPeerId ??
+    (conn.kind === "requesting" || conn.kind === "incoming"
+      ? conn.peerId
+      : null) ??
+    (match.phase === "pending" && match.peerId ? match.peerId : null);
   return (
     <main className="fixed inset-0 overflow-hidden">
       <ActivityBar activity={activity} />
@@ -494,6 +507,7 @@ export default function Home() {
         canConnect={mapConnectIdle}
         focusPeerId={mapFocusPeerId}
         activePeerId={connectedPeerId}
+        linkPeerId={mapLinkPeerId}
       />
 
       <RandomConnect

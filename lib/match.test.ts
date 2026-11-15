@@ -17,10 +17,19 @@ describe("genderFilterAccepts", () => {
     expect(genderFilterAccepts("anyone", "unspecified")).toBe(true);
   });
 
-  it("men and women are strict", () => {
+  it("men and women are strict for declared genders", () => {
     expect(genderFilterAccepts("men", "man")).toBe(true);
     expect(genderFilterAccepts("men", "woman")).toBe(false);
     expect(genderFilterAccepts("women", "woman")).toBe(true);
+    expect(genderFilterAccepts("women", "man")).toBe(false);
+  });
+
+  it("prefer not to say matches men, women, and anyone filters", () => {
+    expect(genderFilterAccepts("men", null)).toBe(true);
+    expect(genderFilterAccepts("men", "unspecified")).toBe(true);
+    expect(genderFilterAccepts("women", null)).toBe(true);
+    expect(genderFilterAccepts("women", "unspecified")).toBe(true);
+    expect(genderFilterAccepts("anyone", "unspecified")).toBe(true);
   });
 });
 

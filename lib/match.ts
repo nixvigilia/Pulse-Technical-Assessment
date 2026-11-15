@@ -28,14 +28,22 @@ export function isConnectionMode(value: unknown): value is ConnectionMode {
   return value === "text" || value === "text_video";
 }
 
+function normalizeGender(gender: GenderValue | null): GenderValue {
+  if (gender === "man" || gender === "woman") return gender;
+  return "unspecified";
+}
+
 /** Whether observer's filter accepts target's gender (or lack thereof). */
 export function genderFilterAccepts(
   filter: GenderPref,
   targetGender: GenderValue | null,
 ): boolean {
   if (filter === "anyone") return true;
-  if (filter === "men") return targetGender === "man";
-  if (filter === "women") return targetGender === "woman";
+  const target = normalizeGender(targetGender);
+  // Prefer not to say matches Connect with: Anyone, Men, or Women.
+  if (target === "unspecified") return true;
+  if (filter === "men") return target === "man";
+  if (filter === "women") return target === "woman";
   return false;
 }
 

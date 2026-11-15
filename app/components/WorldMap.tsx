@@ -5,6 +5,9 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { Map as MapboxMap, Marker } from "mapbox-gl";
 import type { PeerDot } from "@/lib/types";
+import { greatCircleCoordinates } from "@/lib/geo-arc";
+import { setConnectionGlobeMode } from "@/lib/mapbox-route-layers";
+import { PULSE_GLOBE_THEME } from "@/lib/pulse-globe-theme";
 import {
   canReceiveRequest,
   PRESENCE_LABEL,
@@ -13,6 +16,10 @@ import {
 } from "@/lib/presence-state";
 
 const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "pk.eyJ1IjoicHVsc2UtbWFwIiwiYSI6ImNrMDBkZW1vMDAwMDAwMDAifQ.AAAAAAAAAAAAAAAAAAAAAA";
+
+const ARC_STEPS = 48;
+const COMET_CYCLE_MS = 3600;
+const ARC = "#22d3ee";
 
 function shortId(id: string): string {
   return id.length > 8 ? `${id.slice(0, 8)}…` : id;
@@ -25,6 +32,7 @@ export default function WorldMap({
   canConnect,
   focusPeerId = null,
   activePeerId = null,
+  linkPeerId = null,
 }: {
   peers: PeerDot[];
   me: { lat: number; lng: number } | null;
@@ -34,6 +42,8 @@ export default function WorldMap({
   focusPeerId?: string | null;
   /** Current chat partner — card shows match copy, not "Busy" / Request. */
   activePeerId?: string | null;
+  /** Draw a great-circle-style link from you to this peer (match / chat). */
+  linkPeerId?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
@@ -46,6 +56,7 @@ export default function WorldMap({
   const canConnectRef = useRef(canConnect);
   const selectPeerRef = useRef<(peer: PeerDot) => void>(() => {});
   const lastFocusedPeerRef = useRef<string | null>(null);
+  const linkCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     onPeerConnectRef.current = onPeerConnect;
@@ -108,10 +119,13 @@ export default function WorldMap({
         style: "mapbox://styles/mapbox/dark-v11",
         center: me ? [me.lng, me.lat] : [0, 20],
         zoom: me ? 4 : 1.4,
+        maxPitch: 85,
         attributionControl: true,
       });
       map.on("load", () => {
-        if (!cancelled) setReady(true);
+        if (cancelled) return;
+        setConnectionGlobeMode(map, false, PULSE_GLOBE_THEME);
+        setReady(true);
       });
       map.on("click", () => setSelected(null));
       mapRef.current = map;
@@ -207,6 +221,122 @@ export default function WorldMap({
     }
   }, [peers, ready]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+
+    const linked = Boolean(linkPeerId);
+    setConnectionGlobeMode(map, linked, PULSE_GLOBE_THEME);
+    if (linked) {
+      map.easeTo({ pitch: 28, duration: 900 });
+    } else {
+      map.easeTo({ pitch: 0, duration: 700 });
+    }
+  }, [linkPeerId, ready]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const canvas = linkCanvasRef.current;
+    const host = containerRef.current;
+    if (!map || !canvas || !host || !ready) return;
+
+    const peer = linkPeerId
+      ? peers.find((p) => p.id === linkPeerId)
+      : undefined;
+    const ctx = canvas.getContext("2d");
+    if (!ctx || !me || !peer) {
+      ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    const from = me;
+    const to = peer;
+    let frame = 0;
+
+    const paint = () => {
+      const now = performance.now();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = host.clientWidth;
+      const h = host.clientHeight;
+      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      const geo = greatCircleCoordinates(from, to, ARC_STEPS);
+      const flat = geo.map(([lng, lat]) => map.project([lng, lat]));
+      const chord = Math.hypot(
+        flat[flat.length - 1].x - flat[0].x,
+        flat[flat.length - 1].y - flat[0].y,
+      );
+      const lift = Math.min(170, 22 + chord * 0.28);
+      const pts = flat.map((p, i) => {
+        const u = i / ARC_STEPS;
+        return {
+          x: p.x,
+          y: p.y - Math.sin(Math.PI * u) * lift,
+        };
+      });
+
+      ctx.lineCap = "round";
+      ctx.strokeStyle = ARC;
+      ctx.lineWidth = 1.4;
+      for (let k = 0; k < ARC_STEPS; k++) {
+        ctx.globalAlpha = 0.42;
+        ctx.beginPath();
+        ctx.moveTo(pts[k].x, pts[k].y);
+        ctx.lineTo(pts[k + 1].x, pts[k + 1].y);
+        ctx.stroke();
+      }
+
+      const phase = (now % COMET_CYCLE_MS) / COMET_CYCLE_MS;
+      const run = Math.min(1, phase / 0.7);
+      const head = Math.floor(run * ARC_STEPS);
+      for (let k = Math.max(0, head - 10); k < head; k++) {
+        ctx.globalAlpha = (1 - (head - k) / 10) * 0.95;
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(pts[k].x, pts[k].y);
+        ctx.lineTo(pts[k + 1].x, pts[k + 1].y);
+        ctx.stroke();
+      }
+
+      const end = pts[ARC_STEPS];
+      const start = pts[0];
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "#e0f2fe";
+      ctx.beginPath();
+      ctx.arc(end.x, end.y, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      if (phase > 0.7) {
+        const k = (phase - 0.7) / 0.3;
+        ctx.globalAlpha = 1 - k;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(end.x, end.y, 3 + k * 16, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.45 + 0.45 * Math.sin(now / 280);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(start.x, start.y, 9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    };
+
+    const loop = () => {
+      paint();
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(frame);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    };
+  }, [me, peers, linkPeerId, ready]);
+
   const selectedAvailable =
     selected && canReceiveRequest(selected.status) && canConnect;
   const isActiveMatch =
@@ -215,6 +345,11 @@ export default function WorldMap({
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="h-full w-full bg-zinc-900" />
+      <canvas
+        ref={linkCanvasRef}
+        className="pointer-events-none absolute inset-0 z-[5] h-full w-full"
+        aria-hidden
+      />
 
       {!TOKEN && (
         <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
