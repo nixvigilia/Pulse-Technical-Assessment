@@ -4,8 +4,10 @@ import {
   canEndCall,
   canReceiveRequest,
   canStartCall,
+  PRESENCE_LABEL,
   PRESENCE_STATUS,
   presenceMarkerClass,
+  presenceSwatchClass,
 } from "./presence-state";
 
 describe("canReceiveRequest", () => {
@@ -52,12 +54,29 @@ describe("video presence transitions", () => {
   });
 });
 
-describe("presenceMarkerClass", () => {
-  it("maps each status to a dot modifier", () => {
+describe("presence visuals", () => {
+  it("uses green for available and amber for chat or video", () => {
     expect(presenceMarkerClass(PRESENCE_STATUS.available)).toContain(
       "available",
     );
-    expect(presenceMarkerClass(PRESENCE_STATUS.busy)).toContain("busy");
-    expect(presenceMarkerClass(PRESENCE_STATUS.on_call)).toContain("on-call");
+    expect(presenceMarkerClass(PRESENCE_STATUS.busy)).toContain("unavailable");
+    expect(presenceMarkerClass(PRESENCE_STATUS.on_call)).toContain(
+      "unavailable",
+    );
+    expect(presenceSwatchClass(PRESENCE_STATUS.available)).toContain(
+      "emerald",
+    );
+    expect(presenceSwatchClass(PRESENCE_STATUS.busy)).toContain("amber");
+    expect(presenceSwatchClass(PRESENCE_STATUS.on_call)).toContain("amber");
+  });
+
+  it("labels occupied peers as unavailable", () => {
+    expect(PRESENCE_LABEL[PRESENCE_STATUS.available]).toBe("Available");
+    expect(PRESENCE_LABEL[PRESENCE_STATUS.busy]).toBe(
+      "Unavailable – Already in a conversation or video call.",
+    );
+    expect(PRESENCE_LABEL[PRESENCE_STATUS.on_call]).toBe(
+      PRESENCE_LABEL[PRESENCE_STATUS.busy],
+    );
   });
 });

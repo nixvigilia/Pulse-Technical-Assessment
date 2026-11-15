@@ -200,9 +200,9 @@ export default function WorldMap({
             <p className="mt-1 font-mono text-sm text-zinc-300">
               {shortId(selected.id)}
             </p>
-            <p className="mt-2 flex items-center gap-2 text-sm">
+            <p className="mt-2 flex items-start gap-2 text-sm leading-snug">
               <span
-                className={`inline-block h-2.5 w-2.5 rounded-full ${presenceSwatchClass(selected.status)}`}
+                className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${presenceSwatchClass(selected.status)}`}
                 aria-hidden
               />
               <span>{PRESENCE_LABEL[selected.status]}</span>
@@ -220,7 +220,7 @@ export default function WorldMap({
                 disabled={!selectedAvailable}
                 title={
                   !canReceiveRequest(selected.status)
-                    ? "This user is not available for new requests"
+                    ? PRESENCE_LABEL[selected.status]
                     : !canConnect
                       ? "You are already in a connection"
                       : undefined
