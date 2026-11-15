@@ -23,11 +23,17 @@ export default function WorldMap({
   me,
   onPeerConnect,
   canConnect,
+  focusPeerId = null,
+  activePeerId = null,
 }: {
   peers: PeerDot[];
   me: { lat: number; lng: number } | null;
   onPeerConnect: (id: string) => void;
   canConnect: boolean;
+  /** Fly map to this peer once (e.g. after random match). */
+  focusPeerId?: string | null;
+  /** Current chat partner — card shows match copy, not "Busy" / Request. */
+  activePeerId?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
@@ -39,11 +45,38 @@ export default function WorldMap({
   const onPeerConnectRef = useRef(onPeerConnect);
   const canConnectRef = useRef(canConnect);
   const selectPeerRef = useRef<(peer: PeerDot) => void>(() => {});
+  const lastFocusedPeerRef = useRef<string | null>(null);
 
   useEffect(() => {
     onPeerConnectRef.current = onPeerConnect;
     canConnectRef.current = canConnect;
   });
+
+  useEffect(() => {
+    if (!focusPeerId) {
+      lastFocusedPeerRef.current = null;
+      return;
+    }
+    const map = mapRef.current;
+    if (!map || !ready || !me || focusPeerId === lastFocusedPeerRef.current) {
+      return;
+    }
+    const peer = peers.find((p) => p.id === focusPeerId);
+    if (!peer) return;
+
+    lastFocusedPeerRef.current = focusPeerId;
+    setSelected(null);
+
+    const bounds = new mapboxgl.LngLatBounds();
+    bounds.extend([me.lng, me.lat]);
+    bounds.extend([peer.lng, peer.lat]);
+    map.fitBounds(bounds, {
+      padding: { top: 100, bottom: 80, left: 60, right: 60 },
+      maxZoom: 9,
+      duration: 1400,
+      essential: true,
+    });
+  }, [focusPeerId, peers, me, ready]);
 
   useEffect(() => {
     selectPeerRef.current = (peer: PeerDot) => {
@@ -176,6 +209,8 @@ export default function WorldMap({
 
   const selectedAvailable =
     selected && canReceiveRequest(selected.status) && canConnect;
+  const isActiveMatch =
+    selected && activePeerId !== null && selected.id === activePeerId;
 
   return (
     <div className="absolute inset-0">
@@ -194,54 +229,75 @@ export default function WorldMap({
       {selected && (
         <div className="absolute left-1/2 top-20 z-30 w-full max-w-sm -translate-x-1/2 px-4">
           <div className="rounded-2xl border border-zinc-700/80 bg-zinc-900/95 p-4 text-zinc-100 shadow-xl backdrop-blur">
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Stranger
-            </p>
-            <p className="mt-1 font-mono text-sm text-zinc-300">
-              {shortId(selected.id)}
-            </p>
-            <p className="mt-2 flex items-center gap-2 text-sm">
-              <span
-                className={`inline-block h-2.5 w-2.5 rounded-full ${presenceSwatchClass(selected.status)}`}
-                aria-hidden
-              />
-              <span>{PRESENCE_LABEL[selected.status]}</span>
-            </p>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                className="flex-1 rounded-full border border-zinc-600 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                disabled={!selectedAvailable}
-                title={
-                  !canReceiveRequest(selected.status)
-                    ? "This user is not available for new requests"
-                    : !canConnect
-                      ? "You are already in a connection"
-                      : undefined
-                }
-                onClick={() => {
-                  if (!selectedAvailable) return;
-                  onPeerConnect(selected.id);
-                  setSelected(null);
-                }}
-                className="flex-1 rounded-full bg-emerald-400 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-400"
-              >
-                Request
-              </button>
-            </div>
+            {isActiveMatch ? (
+              <>
+                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Your match
+                </p>
+                <p className="mt-2 flex items-center gap-2 text-sm text-emerald-300">
+                  <span
+                    className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400"
+                    aria-hidden
+                  />
+                  <span>In this chat</span>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelected(null)}
+                  className="mt-4 w-full rounded-full border border-zinc-600 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500"
+                >
+                  Close
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  Stranger
+                </p>
+                <p className="mt-1 font-mono text-sm text-zinc-300">
+                  {shortId(selected.id)}
+                </p>
+                <p className="mt-2 flex items-center gap-2 text-sm">
+                  <span
+                    className={`inline-block h-2.5 w-2.5 rounded-full ${presenceSwatchClass(selected.status)}`}
+                    aria-hidden
+                  />
+                  <span>{PRESENCE_LABEL[selected.status]}</span>
+                </p>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelected(null)}
+                    className="flex-1 rounded-full border border-zinc-600 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selectedAvailable}
+                    title={
+                      !canReceiveRequest(selected.status)
+                        ? "This user is not available for new requests"
+                        : !canConnect
+                          ? "You are already in a connection"
+                          : undefined
+                    }
+                    onClick={() => {
+                      if (!selectedAvailable) return;
+                      onPeerConnect(selected.id);
+                      setSelected(null);
+                    }}
+                    className="flex-1 rounded-full bg-emerald-400 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-400"
+                  >
+                    Request
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 rounded-full bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 backdrop-blur">
-        {peers.length} online
-      </div>
     </div>
   );
 }

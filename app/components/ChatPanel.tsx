@@ -20,7 +20,7 @@ export default function ChatPanel({
   connected: boolean;
   videoBusy: boolean;
   onSend: (text: string) => void;
-  onStartVideo: () => void;
+  onStartVideo?: () => void;
   onEnd: () => void;
 }) {
   const [draft, setDraft] = useState("");
@@ -48,13 +48,15 @@ export default function ChatPanel({
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={onStartVideo}
-            disabled={!connected || videoBusy}
-            className="rounded-full border border-zinc-700 px-3 py-1.5 text-sm hover:border-zinc-500 disabled:opacity-40"
-          >
-            Video
-          </button>
+          {onStartVideo && (
+            <button
+              onClick={onStartVideo}
+              disabled={!connected || videoBusy}
+              className="rounded-full border border-zinc-700 px-3 py-1.5 text-sm hover:border-zinc-500 disabled:opacity-40"
+            >
+              Video
+            </button>
+          )}
           <button
             onClick={onEnd}
             className="rounded-full bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400"

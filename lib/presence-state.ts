@@ -4,6 +4,8 @@ export const PRESENCE_STATUS = {
   available: "available",
   busy: "busy",
   on_call: "on_call",
+  searching: "searching",
+  pending_accept: "pending_accept",
 } as const;
 
 export type PresenceStatus =
@@ -13,13 +15,17 @@ export const PRESENCE_LABEL: Record<PresenceStatus, string> = {
   available: "Available",
   busy: "Busy",
   on_call: "On a call",
+  searching: "Unavailable",
+  pending_accept: "Unavailable",
 };
 
 export function isValidPresenceStatus(value: unknown): value is PresenceStatus {
   return (
     value === PRESENCE_STATUS.available ||
     value === PRESENCE_STATUS.busy ||
-    value === PRESENCE_STATUS.on_call
+    value === PRESENCE_STATUS.on_call ||
+    value === PRESENCE_STATUS.searching ||
+    value === PRESENCE_STATUS.pending_accept
   );
 }
 
@@ -34,6 +40,8 @@ export function presenceSwatchClass(status: PresenceStatus): string {
     case PRESENCE_STATUS.available:
       return "bg-emerald-400 pulse-status-swatch--available";
     case PRESENCE_STATUS.busy:
+    case PRESENCE_STATUS.searching:
+    case PRESENCE_STATUS.pending_accept:
       return "bg-amber-400";
     case PRESENCE_STATUS.on_call:
       return "bg-sky-400 pulse-status-swatch--on-call";
@@ -45,6 +53,8 @@ export function presenceMarkerClass(status: PresenceStatus): string {
     case PRESENCE_STATUS.available:
       return "pulse-dot pulse-dot--available";
     case PRESENCE_STATUS.busy:
+    case PRESENCE_STATUS.searching:
+    case PRESENCE_STATUS.pending_accept:
       return "pulse-dot pulse-dot--busy";
     case PRESENCE_STATUS.on_call:
       return "pulse-dot pulse-dot--on-call";

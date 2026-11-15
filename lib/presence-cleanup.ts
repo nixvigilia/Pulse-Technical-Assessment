@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { releaseMatchPartner } from "@/lib/match-queue";
 import { PRESENCE_STATUS } from "@/lib/presence-state";
 
 /** When a session vanishes, free their partner and notify them. */
@@ -6,6 +7,8 @@ export async function releasePartnersForPresenceIds(
   departedIds: string[],
 ): Promise<void> {
   if (departedIds.length === 0) return;
+
+  await releaseMatchPartner(departedIds);
 
   const departed = await prisma.presence.findMany({
     where: { id: { in: departedIds } },

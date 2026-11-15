@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import EntryGate from "./components/EntryGate";
 import WorldMap from "./components/WorldMap";
+import ActivityBar from "./components/ActivityBar";
+import RandomConnect from "./components/RandomConnect";
 import ConnectionPrompt from "./components/ConnectionPrompt";
 import ChatPanel, { type ChatMessage } from "./components/ChatPanel";
 import VideoPanel from "./components/VideoPanel";
-import { join, leave, poll, sendSignal } from "@/lib/api";
+import { join, leave, matchAction, poll, savePreferences, sendSignal } from "@/lib/api";
 import { generateSessionSecret } from "@/lib/generate-session-secret";
 import {
   forgetLiveSession,
@@ -15,7 +17,13 @@ import {
 } from "@/lib/session-lifecycle";
 import { PeerSession, type DescType, type PeerControl } from "@/lib/webrtc";
 import { POLL_INTERVAL_MS } from "@/lib/presence";
-import { type PeerDot, type SignalMsg } from "@/lib/types";
+import {
+  type ActivityCounts,
+  type MatchSnapshot,
+  type PeerDot,
+  type SessionPreferences,
+  type SignalMsg,
+} from "@/lib/types";
 
 type Conn =
   | { kind: "idle" }
@@ -27,6 +35,22 @@ type Conn =
 type VideoState = "none" | "requesting" | "incoming" | "active";
 
 const REQUEST_TIMEOUT_MS = 30_000;
+
+const IDLE_MATCH: MatchSnapshot = {
+  phase: "idle",
+  language: null,
+  mode: null,
+  youAccepted: false,
+  acceptedCount: 0,
+  expiresAt: null,
+  peerId: null,
+};
+
+const DEFAULT_ACTIVITY: ActivityCounts = {
+  online: 0,
+  available: 0,
+  accepting: 0,
+};
 
 export default function Home() {
   const [phase, setPhase] = useState<"gate" | "live">("gate");
@@ -40,7 +64,18 @@ export default function Home() {
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   );
-
+  const [activity, setActivity] = useState<ActivityCounts>(DEFAULT_ACTIVITY);
+  const [match, setMatch] = useState<MatchSnapshot>(IDLE_MATCH);
+  const [preferences, setPreferences] = useState<SessionPreferences>({
+    spokenLanguages: [],
+    preferredLanguage: null,
+    gender: null,
+  });
+  const [randomOpen, setRandomOpen] = useState(false);
+  const [mapFocusPeerId, setMapFocusPeerId] = useState<string | null>(null);
+  const [matchBusy, setMatchBusy] = useState(false);
+  const prevMatchPhase = useRef<MatchSnapshot["phase"]>("idle");
+  const matchPhaseRef = useRef<MatchSnapshot["phase"]>("idle");
   const [conn, _setConn] = useState<Conn>({ kind: "idle" });
   const connRef = useRef<Conn>(conn);
   const setConn = (c: Conn) => {
@@ -98,6 +133,7 @@ export default function Home() {
     setVideo("none");
     setMessages([]);
     setConn({ kind: "idle" });
+    setMapFocusPeerId(null);
     if (message) showNotice(message);
   }
 
@@ -192,6 +228,7 @@ export default function Home() {
 
   function requestConnection(peerId: string) {
     if (connRef.current.kind !== "idle") return;
+    if (matchPhaseRef.current !== "idle") return;
     setConn({ kind: "requesting", peerId });
     void sendSignal(sessionId, sessionSecret, peerId, "request");
     requestTimer.current = setTimeout(() => {
@@ -343,7 +380,41 @@ export default function Home() {
       try {
         const data = await poll(sessionId, sessionSecret);
         if (!active) return;
-        setPeers(data.peers);
+        setPeers(data.peers ?? []);
+        setActivity(data.activity ?? DEFAULT_ACTIVITY);
+        setPreferences(
+          data.preferences ?? {
+            spokenLanguages: [],
+            preferredLanguage: null,
+            gender: null,
+          },
+        );
+
+        const prev = prevMatchPhase.current;
+        const next = data.match ?? IDLE_MATCH;
+        if (
+          prev === "pending" &&
+          next.phase === "searching" &&
+          connRef.current.kind === "idle"
+        ) {
+          showNotice("Match expired.");
+        }
+        prevMatchPhase.current = next.phase;
+        matchPhaseRef.current = next.phase;
+        setMatch(next);
+
+        if (
+          next.phase === "ready" &&
+          next.peerId &&
+          connRef.current.kind === "idle"
+        ) {
+          const peerId = next.peerId;
+          const initiator = sessionId.localeCompare(peerId) < 0;
+          startPeer(peerId, initiator);
+          setConn({ kind: "connecting", peerId });
+          setMapFocusPeerId(peerId);
+          setRandomOpen(false);
+        }
 
         const c = connRef.current;
         if (c.kind === "connecting" || c.kind === "connected") {
@@ -400,14 +471,91 @@ export default function Home() {
   }
 
   const inChat = conn.kind === "connecting" || conn.kind === "connected";
-
+  const connectedPeerId =
+    conn.kind === "connecting" || conn.kind === "connected" ? conn.peerId : null;
+  const mapConnectIdle =
+    conn.kind === "idle" && match.phase === "idle";
   return (
     <main className="fixed inset-0 overflow-hidden">
+      <ActivityBar activity={activity} />
+
+      <button
+        type="button"
+        onClick={() => setRandomOpen(true)}
+        className="absolute right-4 top-4 z-20 rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 shadow-lg hover:bg-emerald-300"
+      >
+        Random
+      </button>
+
       <WorldMap
         peers={peers}
         me={myLocation}
         onPeerConnect={requestConnection}
-        canConnect={conn.kind === "idle"}
+        canConnect={mapConnectIdle}
+        focusPeerId={mapFocusPeerId}
+        activePeerId={connectedPeerId}
+      />
+
+      <RandomConnect
+        open={randomOpen}
+        onClose={() => setRandomOpen(false)}
+        preferences={preferences}
+        match={match}
+        busy={matchBusy}
+        onSavePreferences={async (prefs) => {
+          setMatchBusy(true);
+          try {
+            await savePreferences(sessionId, sessionSecret, {
+              spokenLanguages: prefs.spokenLanguages,
+              preferredLanguage: prefs.preferredLanguage,
+              gender: prefs.gender,
+            });
+            setPreferences(prefs);
+          } finally {
+            setMatchBusy(false);
+          }
+        }}
+        onJoin={async (opts) => {
+          setMatchBusy(true);
+          try {
+            await matchAction(sessionId, sessionSecret, "join", opts);
+            setPreferences({
+              spokenLanguages: opts.spokenLanguages,
+              preferredLanguage: null,
+              gender: opts.gender,
+            });
+          } catch (e) {
+            showNotice(e instanceof Error ? e.message : "Could not join queue.");
+          } finally {
+            setMatchBusy(false);
+          }
+        }}
+        onCancel={async () => {
+          setMatchBusy(true);
+          try {
+            await matchAction(sessionId, sessionSecret, "cancel");
+            showNotice("Search cancelled.");
+          } finally {
+            setMatchBusy(false);
+          }
+        }}
+        onAccept={async () => {
+          setMatchBusy(true);
+          try {
+            await matchAction(sessionId, sessionSecret, "accept");
+          } finally {
+            setMatchBusy(false);
+          }
+        }}
+        onDecline={async () => {
+          setMatchBusy(true);
+          try {
+            await matchAction(sessionId, sessionSecret, "decline");
+            showNotice("Match declined.");
+          } finally {
+            setMatchBusy(false);
+          }
+        }}
       />
 
       {notice && (
