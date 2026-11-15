@@ -58,7 +58,8 @@ export async function POST(request: NextRequest) {
         secretHash: hashSessionSecret(secret),
         lat: offset.lat,
         lng: offset.lng,
-        busy: false,
+        status: "available",
+        peerId: null,
         lastSeen: new Date(),
       },
     });
