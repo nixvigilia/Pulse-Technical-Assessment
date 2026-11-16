@@ -122,6 +122,8 @@ I changed the processing order in `lib/webrtc.ts`:
 
 - The **End video** button now stays visible during calls on the tested desktop browsers (Chrome and Firefox).
 
+**Later (Phase 2):** Chat is hidden by default during video but can slide back in via **Show chat** / **Hide chat** without crowding the controls — see **Rules — Phase 2 → Chat and video**.
+
 ### 5. Ghost dots on the map (stale presence)
 
 **What was broken:**
@@ -198,7 +200,11 @@ When you request someone, wait on a random match, or are already in chat, a curv
 
 ### Chat and video
 
-New messages scroll into view. **Send**, **Video**, and **End chat** are easy to spot. The **Send** label fits on the button. If someone says no to video, the chat shows a short note so you know what happened. During a call, chat hides so the video and **End video** stay visible on screen.
+New messages scroll into view. **Send**, **Video**, and **End chat** are easy to spot. The **Send** label fits on the button. Video declines and camera-off moments show as short system lines in the thread so nobody is left guessing.
+
+**During a call**, chat stays **hidden by default** so **End video** and the main frame stay easy to reach (this builds on the Phase 1 layout fix). You can open it with **Show chat** on the video bar, or **Hide chat** from the bar or from the chat header. While chat is over video, **End chat** is hidden so you do not disconnect the whole session by mistake — only **End video** ends the call.
+
+When chat is closed during video, new stranger messages and system notes bump an **unread count** on **Show chat** (resets when you open chat). Leaving video adds clear system lines: **You left the video.** on your side, **Stranger left the video. You can invite them back.** on theirs if they stay in the call shell.
 
 ### Random panel
 
@@ -351,6 +357,4 @@ You can only have **one chat at a time**, same as map requests.
 
 When you both accept, the app uses the same connect flow as a normal map request. Your match is still a dot on the map with a line between you. Random is just another way to find that dot.
 
-### What I would do with more time
-
-Show roughly how long you might wait. Looser language rules (for example “English is OK”). Simple interest tags for one session only. Limits so people cannot spam match over and over. Still no accounts, still no history.
+That one path also carries **video + text together**: peer chat keeps working over the existing WebRTC data channel during a call, with the Phase 2 overlay toggle and unread badge so random matches are not stuck choosing between talking on camera or in text.

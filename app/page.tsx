@@ -87,7 +87,15 @@ export default function Home() {
   const setVideo = (v: VideoState) => {
     videoRef.current = v;
     _setVideo(v);
+    if (v !== "active") {
+      setVideoChatOpen(false);
+      setVideoChatUnread(0);
+    }
   };
+  const [partnerVideoOff, setPartnerVideoOff] = useState(false);
+  const [videoChatOpen, setVideoChatOpen] = useState(false);
+  const [videoChatUnread, setVideoChatUnread] = useState(0);
+  const videoChatOpenRef = useRef(videoChatOpen);
 
   const peerRef = useRef<PeerSession | null>(null);
   const msgId = useRef(0);
@@ -111,16 +119,59 @@ export default function Home() {
   }, [sessionId, sessionSecret, phase, conn]);
 
   useEffect(() => {
+    videoChatOpenRef.current = videoChatOpen;
+    if (videoChatOpen) setVideoChatUnread(0);
+  }, [videoChatOpen]);
+
+  useEffect(() => {
     leaveOrphanedLiveSessionFromStorage();
   }, []);
+
+  function bumpVideoChatUnread() {
+    if (videoRef.current === "active" && !videoChatOpenRef.current) {
+      setVideoChatUnread((n) => n + 1);
+    }
+  }
+
+  useEffect(() => {
+    if (!remoteStream) return;
+    const tracks = remoteStream.getVideoTracks();
+    const onUnmute = () => {
+      if (videoRef.current === "active") syncRemoteFromPeer();
+    };
+    const onEnded = () => {
+      if (videoRef.current === "active") setPartnerVideoOff(true);
+    };
+    for (const track of tracks) {
+      track.addEventListener("unmute", onUnmute);
+      track.addEventListener("ended", onEnded);
+    }
+    return () => {
+      for (const track of tracks) {
+        track.removeEventListener("unmute", onUnmute);
+        track.removeEventListener("ended", onEnded);
+      }
+    };
+  }, [remoteStream]);
 
   function showNotice(text: string) {
     setNotice(text);
     window.setTimeout(() => setNotice(null), 3500);
   }
 
+  function syncRemoteFromPeer() {
+    const ps = peerRef.current;
+    if (!ps) return;
+    const remote = ps.remoteMediaStream();
+    if (remote) {
+      setRemoteStream(remote);
+      setPartnerVideoOff(false);
+    }
+  }
+
   function addMessage(mine: boolean, text: string) {
     setMessages((prev) => [...prev, { id: msgId.current++, mine, text }]);
+    bumpVideoChatUnread();
   }
 
   function addSystemMessage(text: string) {
@@ -128,6 +179,7 @@ export default function Home() {
       ...prev,
       { id: msgId.current++, mine: false, text, system: true },
     ]);
+    bumpVideoChatUnread();
   }
 
   function teardown(message?: string) {
@@ -136,7 +188,9 @@ export default function Home() {
     peerRef.current = null;
     setLocalStream(null);
     setRemoteStream(null);
+    setPartnerVideoOff(false);
     setVideo("none");
+    setVideoChatUnread(0);
     setMessages([]);
     setConn({ kind: "idle" });
     setMapFocusPeerId(null);
@@ -170,7 +224,17 @@ export default function Home() {
       },
       onChat: (text) => addMessage(false, text),
       onControl: (ctrl) => handleControl(ctrl),
-      onRemoteStream: (stream) => setRemoteStream(stream),
+      onRemoteStream: (stream) => {
+        if (!stream || stream.getVideoTracks().length === 0) {
+          if (videoRef.current === "active") setPartnerVideoOff(true);
+          return;
+        }
+        setRemoteStream(stream);
+        const live = stream
+          .getVideoTracks()
+          .some((track) => track.readyState === "live");
+        if (live) setPartnerVideoOff(false);
+      },
       onConnectionState: (state) => {
         if (
           state === "failed" ||
@@ -199,7 +263,20 @@ export default function Home() {
     const ps = peerRef.current;
     switch (ctrl) {
       case "video-request":
-        if (videoRef.current === "none") setVideo("incoming");
+        if (videoRef.current === "none") {
+          setVideo("incoming");
+        } else if (videoRef.current === "active" && ps) {
+          void ps
+            .startVideo()
+            .then((stream) => {
+              setLocalStream(stream);
+              ps.sendControl("video-accept");
+            })
+            .catch(() => {
+              ps.sendControl("video-decline");
+              showNotice("Camera unavailable.");
+            });
+        }
         break;
       case "video-accept":
         if (videoRef.current === "requesting" && ps) {
@@ -207,6 +284,8 @@ export default function Home() {
             .then((stream) => {
               setLocalStream(stream);
               setVideo("active");
+              setPartnerVideoOff(false);
+              syncRemoteFromPeer();
               notifyVideoActive();
             })
             .catch(() => {
@@ -214,6 +293,11 @@ export default function Home() {
               ps.sendControl("video-end");
               showNotice("Camera unavailable.");
             });
+        } else if (videoRef.current === "active" && ps) {
+          setPartnerVideoOff(false);
+          syncRemoteFromPeer();
+          window.setTimeout(() => syncRemoteFromPeer(), 400);
+          window.setTimeout(() => syncRemoteFromPeer(), 1200);
         }
         break;
       case "video-decline":
@@ -221,14 +305,22 @@ export default function Home() {
           setVideo("none");
           addSystemMessage("Stranger declined the video call.");
           showNotice("Video declined.");
+        } else if (videoRef.current === "active") {
+          setPartnerVideoOff(true);
+          showNotice("Stranger declined the video call.");
         }
         break;
       case "video-end":
-        ps?.stopVideo();
-        setLocalStream(null);
-        setRemoteStream(null);
-        setVideo("none");
-        notifyVideoEnded();
+        if (videoRef.current === "active") {
+          setPartnerVideoOff(true);
+          addSystemMessage(
+            "Stranger left the video. You can invite them back.",
+          );
+        } else {
+          setPartnerVideoOff(false);
+          setRemoteStream(null);
+          setVideo("none");
+        }
         break;
     }
   }
@@ -292,6 +384,8 @@ export default function Home() {
         setLocalStream(stream);
         ps.sendControl("video-accept");
         setVideo("active");
+        setPartnerVideoOff(false);
+        syncRemoteFromPeer();
         notifyVideoActive();
       })
       .catch(() => {
@@ -307,6 +401,13 @@ export default function Home() {
     addSystemMessage("You declined the video call.");
   }
 
+  function inviteBackToVideo() {
+    const ps = peerRef.current;
+    if (!ps || videoRef.current !== "active") return;
+    ps.sendControl("video-request");
+    showNotice("Asked the stranger to turn video back on.");
+  }
+
   function endVideo() {
     const ps = peerRef.current;
     ps?.stopVideo();
@@ -314,7 +415,9 @@ export default function Home() {
     notifyVideoEnded();
     setLocalStream(null);
     setRemoteStream(null);
+    setPartnerVideoOff(false);
     setVideo("none");
+    addSystemMessage("You left the video.");
   }
 
   function processSignal(sig: SignalMsg) {
@@ -640,16 +743,20 @@ export default function Home() {
         />
       )}
 
-      {inChat && video !== "active" && (
+      {inChat && (video !== "active" || videoChatOpen) && (
         <ChatPanel
           messages={messages}
           connected={conn.kind === "connected"}
           videoBusy={video !== "none"}
+          overVideo={video === "active"}
           onSend={(text) => {
             peerRef.current?.sendChat(text);
             addMessage(true, text);
           }}
-          onStartVideo={startVideoRequest}
+          onStartVideo={video === "active" ? undefined : startVideoRequest}
+          onHideChat={
+            video === "active" ? () => setVideoChatOpen(false) : undefined
+          }
           onEnd={endConnection}
         />
       )}
@@ -676,6 +783,11 @@ export default function Home() {
         <VideoPanel
           localStream={localStream}
           remoteStream={remoteStream}
+          partnerLeft={partnerVideoOff}
+          chatOpen={videoChatOpen}
+          hiddenChatUnread={videoChatUnread}
+          onToggleChat={() => setVideoChatOpen((open) => !open)}
+          onInviteBack={inviteBackToVideo}
           onEnd={endVideo}
         />
       )}

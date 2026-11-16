@@ -25,6 +25,8 @@ export class PeerSession {
   private makingOffer = false;
   private ignoreOffer = false;
   private localStream: MediaStream | null = null;
+  private videoSender: RTCRtpSender | null = null;
+  private audioSender: RTCRtpSender | null = null;
   private closed = false;
   private readonly cb: PeerCallbacks;
   private pendingCandidates: RTCIceCandidateInit[] = [];
@@ -52,8 +54,11 @@ export class PeerSession {
       }
     };
 
-    this.pc.ontrack = ({ streams }) => {
-      this.cb.onRemoteStream(streams[0] ?? null);
+    this.pc.ontrack = ({ track }) => {
+      track.addEventListener("unmute", () => {
+        this.cb.onRemoteStream(this.remoteMediaStream());
+      });
+      this.cb.onRemoteStream(this.remoteMediaStream());
     };
 
     this.pc.onconnectionstatechange = () => {
@@ -145,31 +150,57 @@ export class PeerSession {
     }
   }
 
+  /** Live inbound tracks — needed after replaceTrack when ontrack may not refire. */
+  remoteMediaStream(): MediaStream | null {
+    const tracks = this.pc
+      .getReceivers()
+      .map((r) => r.track)
+      .filter(
+        (t): t is MediaStreamTrack => t !== null && t.readyState === "live",
+      );
+    if (!tracks.some((t) => t.kind === "video")) return null;
+    return new MediaStream(tracks);
+  }
+
   async startVideo(): Promise<MediaStream> {
-    if (!this.localStream) {
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-      for (const track of this.localStream.getTracks()) {
-        this.pc.addTrack(track, this.localStream);
+    const live = this.localStream?.getTracks().some((track) => track.readyState === "live");
+    if (this.localStream && live) {
+      this.cb.onRemoteStream(this.remoteMediaStream());
+      return this.localStream;
+    }
+
+    this.localStream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true,
+    });
+    const videoTrack = this.localStream.getVideoTracks()[0] ?? null;
+    const audioTrack = this.localStream.getAudioTracks()[0] ?? null;
+
+    if (videoTrack) {
+      if (this.videoSender) {
+        await this.videoSender.replaceTrack(videoTrack);
+      } else {
+        this.videoSender = this.pc.addTrack(videoTrack, this.localStream);
       }
     }
+    if (audioTrack) {
+      if (this.audioSender) {
+        await this.audioSender.replaceTrack(audioTrack);
+      } else {
+        this.audioSender = this.pc.addTrack(audioTrack, this.localStream);
+      }
+    }
+    this.cb.onRemoteStream(this.remoteMediaStream());
     return this.localStream;
   }
 
   stopVideo() {
-    if (this.localStream) {
-      for (const track of this.localStream.getTracks()) track.stop();
-      for (const sender of this.pc.getSenders()) {
-        if (sender.track) {
-          try {
-            this.pc.removeTrack(sender);
-          } catch {}
-        }
-      }
-      this.localStream = null;
-    }
+    if (!this.localStream && !this.videoSender && !this.audioSender) return;
+    for (const track of this.localStream?.getTracks() ?? []) track.stop();
+    this.localStream = null;
+    // Keep the senders so the other person can rejoin without a new peer connection.
+    void this.videoSender?.replaceTrack(null);
+    void this.audioSender?.replaceTrack(null);
   }
 
   close() {
