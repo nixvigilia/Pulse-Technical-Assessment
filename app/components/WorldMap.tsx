@@ -56,6 +56,7 @@ export default function WorldMap({
   const canConnectRef = useRef(canConnect);
   const selectPeerRef = useRef<(peer: PeerDot) => void>(() => {});
   const lastFocusedPeerRef = useRef<string | null>(null);
+  const hadActiveLinkRef = useRef(false);
   const linkCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -228,11 +229,26 @@ export default function WorldMap({
     const linked = Boolean(linkPeerId);
     setConnectionGlobeMode(map, linked, PULSE_GLOBE_THEME);
     if (linked) {
+      hadActiveLinkRef.current = true;
       map.easeTo({ pitch: 28, duration: 900 });
-    } else {
-      map.easeTo({ pitch: 0, duration: 700 });
+      return;
     }
-  }, [linkPeerId, ready]);
+    if (hadActiveLinkRef.current) {
+      hadActiveLinkRef.current = false;
+      lastFocusedPeerRef.current = null;
+      if (me) {
+        map.easeTo({
+          center: [me.lng, me.lat],
+          zoom: 4,
+          pitch: 0,
+          bearing: 0,
+          duration: 900,
+        });
+      } else {
+        map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
+      }
+    }
+  }, [linkPeerId, ready, me]);
 
   useEffect(() => {
     const map = mapRef.current;
