@@ -182,11 +182,6 @@ I changed the processing order in `lib/webrtc.ts`:
 
 ### 1. Map dots — green and amber only
 
-**What was confusing:**
-
-- The map used three dot colors: green (available), amber (in text chat), and blue (on a video call).
-- Amber and blue both meant “do not tap — already occupied.” Blue only told you *how* they were occupied (chat vs video), which does not change whether you can send a new connection request.
-
 **What I changed:**
 
 - **Map UX:** Two colors only:
@@ -213,16 +208,13 @@ Full write-up: `docs/security-review.md`. Below is what I found, how I ranked it
 
 ### Main issue (SEC-001) — session id is the only “password”
 
-- Each user gets a random **session id** (UUID). The map **poll** returns every online user’s id in `peers` so dots can render.
-- The API (`/api/join`, `/api/poll`, `/api/signal`, `/api/leave`) **does not check anything else** — no login, no secret. If your request includes someone’s id, the server treats you as that person.
-- That is a **global design issue** (localhost and Vercel), not something caused by using two browsers on one PC. Any HTTP client (`fetch`, curl, Postman, a script) can call the same endpoints with the same JSON the app uses.
-- **Chat text is not on the server** (WebRTC peer-to-peer). The risk is **impersonation**: read or delete another user’s **signaling mailbox** (`request`, `accept`, `offer`, etc.) and eventually complete the call **as them**, so messages go to the attacker instead of the victim. I did not implement a fix yet (assessment was review-first).
+Every dot’s **session id** is public — **`GET /api/poll`** lists it in **`peers`** so the map can render. **`/api/join`**, **`/api/poll`**, **`/api/signal`**, and **`/api/leave`** used that id alone as proof of identity (no per-tab secret, no login). Anyone who copied an id from the network tab, console, or Postman could send signals or **`leave`** **as that user**. Chat text never hit the server (WebRTC), but the **signaling mailbox** did — so the risk was **impersonation** and **mailbox abuse**, not reading chat from Postgres.
+
+**How I reproduced:** Two map windows → read a stranger’s id from **poll** → DevTools **`fetch`** **`request`** (fake incoming call) and **`leave`** (remove their dot) with **only** ids in the JSON. Step-by-step below. Same root cause as unread **`poll`** / forged **`accept`**/**`end`** (not all re-tested manually — see `docs/security-review.md`).
 
 **How I think about it (simple):** public room number on a lobby board, but the hotel also uses that number as your ID card — anyone who sees the board can pretend to be you at the desk.
 
 ### What I reproduced locally
-
-Two **SEC-001** checks in the browser, in this order: **(1) fake `request`**, then **(2) `leave`** to kick someone off the map. I did **not** manually reproduce mailbox `poll` theft or `accept`/`end` impersonation (same root cause — see `docs/security-review.md`).
 
 **Setup**
 
@@ -277,39 +269,53 @@ fetch("/api/leave", {
 - Got **`status: 200`**, **`body: { ok: true }`**. On the **other** window’s map, their dot was gone within ~1–2s (`peers` no longer listed them). Victim’s tab can still show the local **“Me”** pin until they refresh — server-side they were removed.
 - Same issue: knowing their public id is enough; no secret required (`lib/api.ts` `leave`).
 
-### What I fixed (SEC-001 — partial)
+### What I fixed (SEC-001)
 
 - **Session secret:** each tab generates a random secret (memory only). Server stores `secretHash` on `Presence` (`prisma/schema.prisma`).
 - **API auth:** `/api/join`, `/api/poll`, `/api/signal`, `/api/leave` require the secret (`body.secret` or header `X-Pulse-Session-Key` on poll). Wrong or missing secret → **`403 unauthorized`**.
 - **Client:** `lib/api.ts` + `app/page.tsx` send the secret on every call; `leave` beacon includes `{ id, secret }`.
 - **Re-test:** old Postman/console calls with **only** ids (no secret) should fail. Map + connect must still work in two normal windows.
-- **DB:** run `npx prisma db push` locally (drop/empty `Presence` if the migration complains about existing rows). Not fixed yet: SEC-002–004 (see below).
+- **DB:** run `npx prisma db push` locally (drop/empty `Presence` if the migration complains about existing rows). Not fixed yet: SEC-002, SEC-004 (see below).
+
+### Main issue (SEC-003) — tab close leaves partner stuck `busy`
+
+**Problem (from `docs/security-review.md`):** Closing a tab only deleted the leaver’s presence row. The survivor stayed `busy` with no `end` in the mailbox, because the server did not remember the pair.
+
+**How I reproduced:** Two browser windows → connect → accept → close one tab (or refresh it). The other window stayed in chat; on the map the survivor often stayed **unavailable (amber)** and new **Request** attempts were auto-declined until reload.
+
+### What I fixed (SEC-003)
+
+**Server**
+
+- **`prisma/schema.prisma`:** `Presence.peerId` — mutual pointer set on `accept` in `app/api/signal/route.ts`.
+- **`lib/presence-cleanup.ts`:** `releasePartnersForPresenceIds` — for departing session(s), reset the partner to `available`, clear `peerId`, enqueue `type: "end"` to their mailbox; also clears random-match state via `releaseMatchPartner`.
+- **`app/api/leave/route.ts`:** Calls release **before** deleting the leaver (after SEC-001 secret check).
+- **`app/api/poll/route.ts`:** Stale reap loads expired ids, releases partners, then deletes rows (no blind `deleteMany` on stale presence alone).
+
+**Client (also covers refresh — see “Partner still connected after the other user refreshes” above)**
+
+- **`app/page.tsx`:** `pagehide` sends `end` when in a call, then `leave`; WebRTC `failed` / `disconnected` / `closed` sends `end` before local `teardown`; poll tears down if the partner’s dot is missing for ~2 ticks.
+- **`lib/session-lifecycle.ts`:** Orphan `leave` on the next load when refresh missed `pagehide`.
+
+**Re-test:** Two tabs → connect → close or refresh one tab → within stale window (~15s) or immediately on `leave`, the other tab should leave the chat and show **available** (green) on the map again.
 
 ### Ranking (short)
 
-| Priority               | ID              | Issue                                                                                            |
-| ---------------------- | --------------- | ------------------------------------------------------------------------------------------------ |
-| Must fix before launch | SEC-001         | Public id = API credential → **fixed (secret)**; reproduced before fix: fake `request` + `leave` |
-| Must fix before launch | SEC-002         | `busy` and signals not tied to a real connection pair                                            |
-| Must fix before launch | SEC-003         | Tab close leaves partner stuck `busy`                                                            |
-| Must fix before launch | SEC-004         | No rate limits / abuse caps on anonymous API                                                     |
-| Important after        | SEC-005–SEC-010 | Raw GPS on client pin, cleanup, headers, Mapbox token, Next upgrade, etc.                        |
+| Priority               | ID              | Issue                                                                                                        |
+| ---------------------- | --------------- | ------------------------------------------------------------------------------------------------------------ |
+| Must fix before launch | SEC-001         | Public id = API credential → **fixed (secret)**; reproduced before fix: fake `request` + `leave`             |
+| Must fix before launch | SEC-002         | `busy` and signals not tied to a real connection pair                                                        |
+| Must fix before launch | SEC-003         | Tab close leaves partner stuck `busy` → **fixed (`peerId` + partner release on leave/stale + client `end`)** |
+| Must fix before launch | SEC-004         | No rate limits / abuse caps on anonymous API                                                                 |
+| Important after        | SEC-005–SEC-010 | Raw GPS on client pin, cleanup, headers, Mapbox token, Next upgrade, etc.                                    |
 
 Details and remediation phases are in `docs/security-review.md`.
-
-### What I would fix next (not implemented yet)
-
-- Record an active **connection pair** server-side so `accept` / WebRTC signals are only allowed between those two ids.
-- On **leave** / stale cleanup, clear the **partner’s** `busy` flag and send `end` to them.
-- **Rate limit** `/api/*` at the edge (e.g. Vercel Firewall) + cap request body size.
 
 ---
 
 ## Rules — Phase 4 (Make it better)
 
 **Branch:** `feat/global-activity`
-
-Scope (also in `docs/phase-4.md`):
 
 ### 1. Global Activity
 
