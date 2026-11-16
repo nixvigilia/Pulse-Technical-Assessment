@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import EntryGate from "./components/EntryGate";
 import WorldMap from "./components/WorldMap";
+import ActivityBar from "./components/ActivityBar";
+import RandomConnect from "./components/RandomConnect";
 import ConnectionPrompt from "./components/ConnectionPrompt";
 import ChatPanel, { type ChatMessage } from "./components/ChatPanel";
 import VideoPanel from "./components/VideoPanel";
-import { join, leave, poll, sendSignal } from "@/lib/api";
+import { join, leave, matchAction, poll, savePreferences, sendSignal } from "@/lib/api";
 import { generateSessionSecret } from "@/lib/generate-session-secret";
 import {
   forgetLiveSession,
@@ -15,7 +17,13 @@ import {
 } from "@/lib/session-lifecycle";
 import { PeerSession, type DescType, type PeerControl } from "@/lib/webrtc";
 import { POLL_INTERVAL_MS } from "@/lib/presence";
-import { type PeerDot, type SignalMsg } from "@/lib/types";
+import {
+  type ActivityCounts,
+  type MatchSnapshot,
+  type PeerDot,
+  type SessionPreferences,
+  type SignalMsg,
+} from "@/lib/types";
 
 type Conn =
   | { kind: "idle" }
@@ -27,6 +35,21 @@ type Conn =
 type VideoState = "none" | "requesting" | "incoming" | "active";
 
 const REQUEST_TIMEOUT_MS = 30_000;
+
+const IDLE_MATCH: MatchSnapshot = {
+  phase: "idle",
+  language: null,
+  mode: null,
+  youAccepted: false,
+  acceptedCount: 0,
+  expiresAt: null,
+  peerId: null,
+};
+
+const DEFAULT_ACTIVITY: ActivityCounts = {
+  online: 0,
+  available: 0,
+};
 
 export default function Home() {
   const [phase, setPhase] = useState<"gate" | "live">("gate");
@@ -40,7 +63,18 @@ export default function Home() {
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(
     null,
   );
-
+  const [activity, setActivity] = useState<ActivityCounts>(DEFAULT_ACTIVITY);
+  const [match, setMatch] = useState<MatchSnapshot>(IDLE_MATCH);
+  const [preferences, setPreferences] = useState<SessionPreferences>({
+    spokenLanguages: [],
+    preferredLanguage: null,
+    gender: null,
+  });
+  const [randomOpen, setRandomOpen] = useState(false);
+  const [mapFocusPeerId, setMapFocusPeerId] = useState<string | null>(null);
+  const [matchBusy, setMatchBusy] = useState(false);
+  const prevMatchPhase = useRef<MatchSnapshot["phase"]>("idle");
+  const matchPhaseRef = useRef<MatchSnapshot["phase"]>("idle");
   const [conn, _setConn] = useState<Conn>({ kind: "idle" });
   const connRef = useRef<Conn>(conn);
   const setConn = (c: Conn) => {
@@ -89,6 +123,13 @@ export default function Home() {
     setMessages((prev) => [...prev, { id: msgId.current++, mine, text }]);
   }
 
+  function addSystemMessage(text: string) {
+    setMessages((prev) => [
+      ...prev,
+      { id: msgId.current++, mine: false, text, system: true },
+    ]);
+  }
+
   function teardown(message?: string) {
     if (requestTimer.current) clearTimeout(requestTimer.current);
     peerRef.current?.close();
@@ -98,6 +139,7 @@ export default function Home() {
     setVideo("none");
     setMessages([]);
     setConn({ kind: "idle" });
+    setMapFocusPeerId(null);
     if (message) showNotice(message);
   }
 
@@ -177,6 +219,7 @@ export default function Home() {
       case "video-decline":
         if (videoRef.current === "requesting") {
           setVideo("none");
+          addSystemMessage("Stranger declined the video call.");
           showNotice("Video declined.");
         }
         break;
@@ -192,6 +235,7 @@ export default function Home() {
 
   function requestConnection(peerId: string) {
     if (connRef.current.kind !== "idle") return;
+    if (matchPhaseRef.current !== "idle") return;
     setConn({ kind: "requesting", peerId });
     void sendSignal(sessionId, sessionSecret, peerId, "request");
     requestTimer.current = setTimeout(() => {
@@ -260,6 +304,7 @@ export default function Home() {
   function declineVideo() {
     peerRef.current?.sendControl("video-decline");
     setVideo("none");
+    addSystemMessage("You declined the video call.");
   }
 
   function endVideo() {
@@ -343,7 +388,48 @@ export default function Home() {
       try {
         const data = await poll(sessionId, sessionSecret);
         if (!active) return;
-        setPeers(data.peers);
+        setPeers(data.peers ?? []);
+        setActivity(data.activity ?? DEFAULT_ACTIVITY);
+        setPreferences(
+          data.preferences ?? {
+            spokenLanguages: [],
+            preferredLanguage: null,
+            gender: null,
+          },
+        );
+
+        const prev = prevMatchPhase.current;
+        const next = data.match ?? IDLE_MATCH;
+        if (
+          prev === "pending" &&
+          next.phase === "searching" &&
+          connRef.current.kind === "idle"
+        ) {
+          showNotice("Match expired.");
+        }
+        if (
+          next.phase === "pending" &&
+          next.peerId &&
+          prev !== "pending"
+        ) {
+          setMapFocusPeerId(next.peerId);
+        }
+        prevMatchPhase.current = next.phase;
+        matchPhaseRef.current = next.phase;
+        setMatch(next);
+
+        if (
+          next.phase === "ready" &&
+          next.peerId &&
+          connRef.current.kind === "idle"
+        ) {
+          const peerId = next.peerId;
+          const initiator = sessionId.localeCompare(peerId) < 0;
+          startPeer(peerId, initiator);
+          setConn({ kind: "connecting", peerId });
+          setMapFocusPeerId(peerId);
+          setRandomOpen(false);
+        }
 
         const c = connRef.current;
         if (c.kind === "connecting" || c.kind === "connected") {
@@ -400,28 +486,144 @@ export default function Home() {
   }
 
   const inChat = conn.kind === "connecting" || conn.kind === "connected";
-
+  const connectedPeerId =
+    conn.kind === "connecting" || conn.kind === "connected" ? conn.peerId : null;
+  const mapConnectIdle =
+    conn.kind === "idle" && match.phase === "idle";
+  const mapLinkPeerId =
+    connectedPeerId ??
+    (conn.kind === "requesting" || conn.kind === "incoming"
+      ? conn.peerId
+      : null) ??
+    (match.phase === "pending" && match.peerId ? match.peerId : null);
   return (
-    <main className="fixed inset-0 overflow-hidden">
+    <main className="fixed inset-0 overflow-hidden bg-surface text-on-surface">
+      <header className="fixed inset-x-0 top-0 z-50 flex h-16 items-center justify-between gap-3 bg-surface-container-lowest/80 px-4 shadow-[0_4px_24px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="size-2.5 rounded-full bg-primary shadow-[0_0_10px_#4edea3]" />
+            <span className="font-sans text-xl font-semibold tracking-tight">Pulse</span>
+          </div>
+          <ActivityBar activity={activity} />
+          <div className="hidden items-center gap-1.5 rounded-full bg-surface-container-low/50 px-2.5 py-1 lg:flex">
+            <span className="font-sans text-[11px] font-medium uppercase tracking-wider text-outline">
+              Session
+            </span>
+            <span className="font-mono text-xs tracking-wide">Anonymous</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={inChat}
+          title={inChat ? "End your chat to use Random" : undefined}
+          onClick={() => setRandomOpen(true)}
+          className="shrink-0 rounded-full bg-primary-container px-4 py-1.5 font-sans text-[13px] font-medium text-on-primary shadow-[0_0_12px_rgba(16,185,129,0.3)] transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:bg-primary-container"
+        >
+          Random
+        </button>
+      </header>
+
       <WorldMap
         peers={peers}
         me={myLocation}
+        myPreferences={preferences}
         onPeerConnect={requestConnection}
-        canConnect={conn.kind === "idle"}
+        canConnect={mapConnectIdle}
+        focusPeerId={mapFocusPeerId}
+        activePeerId={connectedPeerId}
+        linkPeerId={mapLinkPeerId}
+      />
+
+      <RandomConnect
+        open={randomOpen}
+        onClose={() => setRandomOpen(false)}
+        preferences={preferences}
+        match={match}
+        busy={matchBusy}
+        onSavePreferences={async (prefs) => {
+          setMatchBusy(true);
+          try {
+            await savePreferences(sessionId, sessionSecret, {
+              spokenLanguages: prefs.spokenLanguages,
+              preferredLanguage: prefs.preferredLanguage,
+              gender: prefs.gender,
+            });
+            setPreferences(prefs);
+            setRandomOpen(false);
+            showNotice("Preferences saved.");
+          } catch (e) {
+            showNotice(
+              e instanceof Error ? e.message : "Could not save preferences.",
+            );
+          } finally {
+            setMatchBusy(false);
+          }
+        }}
+        onJoin={async (opts) => {
+          setMatchBusy(true);
+          try {
+            await matchAction(sessionId, sessionSecret, "join", opts);
+            setPreferences({
+              spokenLanguages: opts.spokenLanguages,
+              preferredLanguage: null,
+              gender: opts.gender,
+            });
+          } catch (e) {
+            showNotice(e instanceof Error ? e.message : "Could not join queue.");
+          } finally {
+            setMatchBusy(false);
+          }
+        }}
+        onCancel={async () => {
+          setMatchBusy(true);
+          try {
+            await matchAction(sessionId, sessionSecret, "cancel");
+            showNotice("Search cancelled.");
+          } finally {
+            setMatchBusy(false);
+          }
+        }}
+        onAccept={async () => {
+          setMatchBusy(true);
+          try {
+            await matchAction(sessionId, sessionSecret, "accept");
+            setMatch((m) =>
+              m.phase === "pending" && !m.youAccepted
+                ? {
+                    ...m,
+                    youAccepted: true,
+                    acceptedCount: Math.min(2, m.acceptedCount + 1),
+                  }
+                : m,
+            );
+          } finally {
+            setMatchBusy(false);
+          }
+        }}
+        onDecline={async () => {
+          setMatchBusy(true);
+          try {
+            await matchAction(sessionId, sessionSecret, "decline");
+            showNotice("Match declined.");
+          } finally {
+            setMatchBusy(false);
+          }
+        }}
       />
 
       {notice && (
-        <div className="absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
+        <div className="absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-full bg-surface-container/90 px-4 py-2 text-sm text-on-surface shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           {notice}
         </div>
       )}
 
       {conn.kind === "requesting" && (
-        <div className="absolute left-1/2 top-20 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
+        <div className="absolute left-1/2 top-20 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-surface-container/90 px-4 py-2 text-sm text-on-surface shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <span className="size-2 animate-pulse rounded-full bg-secondary shadow-[0_0_8px_#4cd7f6]" />
           <span>Requesting connection…</span>
           <button
             onClick={cancelRequest}
-            className="rounded-full bg-zinc-700 px-3 py-1 text-xs hover:bg-zinc-600"
+            className="rounded-full bg-surface-container-high px-3 py-1 font-sans text-xs text-on-surface-variant transition hover:text-on-surface"
           >
             Cancel
           </button>
@@ -453,7 +655,8 @@ export default function Home() {
       )}
 
       {video === "requesting" && (
-        <div className="absolute bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
+        <div className="absolute bottom-24 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-surface-container/90 px-4 py-2 text-sm text-on-surface shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <span className="size-2 animate-pulse rounded-full bg-primary shadow-[0_0_8px_#4edea3]" />
           Waiting for stranger to accept video…
         </div>
       )}

@@ -40,6 +40,59 @@ export async function sendSignal(
   if (!res.ok) throw new Error(`signal failed: ${res.status}`);
 }
 
+export async function savePreferences(
+  id: string,
+  secret: string,
+  prefs: {
+    spokenLanguages?: string[];
+    preferredLanguage?: string | null;
+    gender?: "man" | "woman" | "unspecified" | null;
+  },
+): Promise<void> {
+  const res = await fetch("/api/preferences", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, secret, ...prefs }),
+  });
+  if (!res.ok) throw new Error(`preferences failed: ${res.status}`);
+}
+
+const MATCH_ERROR_HINT: Record<string, string> = {
+  "spoken languages required": "Select at least one spoken language.",
+  "not available": "You cannot search right now — try again in a second.",
+  "pending match": "Finish or cancel the current match offer first.",
+  "in a connection": "End your current chat before starting a new search.",
+};
+
+export async function matchAction(
+  id: string,
+  secret: string,
+  action: "join" | "cancel" | "accept" | "decline",
+  fields?: {
+    genderPreference?: "anyone" | "men" | "women";
+    spokenLanguages?: string[];
+    gender?: "man" | "woman" | "unspecified" | null;
+  },
+): Promise<void> {
+  const res = await fetch("/api/match", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, secret, action, ...fields }),
+  });
+  if (!res.ok) {
+    let hint = `Match request failed (${res.status}).`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (typeof body.error === "string") {
+        hint = MATCH_ERROR_HINT[body.error] ?? body.error;
+      }
+    } catch {
+      /* ignore */
+    }
+    throw new Error(hint);
+  }
+}
+
 export function leave(id: string, secret: string): void {
   const body = JSON.stringify({ id, secret });
   if (typeof navigator !== "undefined" && navigator.sendBeacon) {

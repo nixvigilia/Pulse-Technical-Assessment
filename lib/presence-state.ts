@@ -4,6 +4,8 @@ export const PRESENCE_STATUS = {
   available: "available",
   busy: "busy",
   on_call: "on_call",
+  searching: "searching",
+  pending_accept: "pending_accept",
 } as const;
 
 export type PresenceStatus =
@@ -16,13 +18,17 @@ export const PRESENCE_LABEL: Record<PresenceStatus, string> = {
   available: "Available",
   busy: UNAVAILABLE_LABEL,
   on_call: UNAVAILABLE_LABEL,
+  searching: UNAVAILABLE_LABEL,
+  pending_accept: UNAVAILABLE_LABEL,
 };
 
 export function isValidPresenceStatus(value: unknown): value is PresenceStatus {
   return (
     value === PRESENCE_STATUS.available ||
     value === PRESENCE_STATUS.busy ||
-    value === PRESENCE_STATUS.on_call
+    value === PRESENCE_STATUS.on_call ||
+    value === PRESENCE_STATUS.searching ||
+    value === PRESENCE_STATUS.pending_accept
   );
 }
 
@@ -31,11 +37,11 @@ export function canReceiveRequest(status: PresenceStatus): boolean {
   return status === PRESENCE_STATUS.available;
 }
 
-/** Map marker / preview styling key. Chat and video both render as amber. */
+/** Map marker / preview styling key. Chat and video both render in tertiary. */
 export function presenceSwatchClass(status: PresenceStatus): string {
   return canReceiveRequest(status)
-    ? "bg-emerald-400 pulse-status-swatch--available"
-    : "bg-amber-400";
+    ? "bg-primary pulse-status-swatch--available"
+    : "bg-tertiary";
 }
 
 export function presenceMarkerClass(status: PresenceStatus): string {

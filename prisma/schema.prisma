@@ -15,6 +15,8 @@ enum PresenceStatus {
   available
   busy
   on_call
+  searching
+  pending_accept
 }
 
 model Presence {
@@ -26,8 +28,25 @@ model Presence {
   peerId     String? // active connection partner (never sent in poll peers)
   lastSeen   DateTime
 
+  // Session-only preferences (deleted with the row)
+  spokenLanguages   String? // JSON array of language codes
+  preferredLanguage String?
+  gender            String? // man | woman | unspecified
+
+  // Random match queue (never exposed on map peers)
+  matchLanguage      String?
+  matchGenderPref    String? // anyone | men | women
+  matchMode          String? // text | text_video — agreed mode for this pair
+  matchId            String?
+  matchPartnerId     String?
+  matchExpiresAt     DateTime?
+  matchAccepted      Boolean   @default(false)
+  matchSkipPartnerId String? // do not immediately re-pair after expire/decline if others exist
+
   @@index([lastSeen])
   @@index([peerId])
+  @@index([matchId])
+  @@index([status])
 }
 
 model Signal {

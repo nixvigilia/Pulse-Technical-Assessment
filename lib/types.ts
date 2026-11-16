@@ -1,5 +1,6 @@
 // Shared types across client + API.
 
+import type { GenderPref } from "@/lib/match";
 import type { PresenceStatus } from "@/lib/presence-state";
 
 // Signal mailbox message types.
@@ -19,6 +20,9 @@ export interface PeerDot {
   lat: number;
   lng: number;
   status: PresenceStatus;
+  spokenLanguages: string[];
+  gender: "man" | "woman" | "unspecified" | null;
+  matchGenderPref: GenderPref | null;
 }
 
 export interface SignalMsg {
@@ -30,7 +34,34 @@ export interface SignalMsg {
   createdAt: string;
 }
 
+export interface ActivityCounts {
+  online: number;
+  available: number;
+}
+
+export type MatchPhase = "idle" | "searching" | "pending" | "ready";
+
+export interface MatchSnapshot {
+  phase: MatchPhase;
+  language: string | null;
+  mode: "text" | "text_video" | null;
+  youAccepted: boolean;
+  acceptedCount: number;
+  expiresAt: string | null;
+  peerId: string | null;
+  expired?: boolean;
+}
+
+export interface SessionPreferences {
+  spokenLanguages: string[];
+  preferredLanguage: string | null;
+  gender: "man" | "woman" | "unspecified" | null;
+}
+
 export interface PollResponse {
   peers: PeerDot[];
   signals: SignalMsg[];
+  activity: ActivityCounts;
+  match: MatchSnapshot;
+  preferences: SessionPreferences;
 }

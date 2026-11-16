@@ -6,6 +6,14 @@ import { authorizePresence } from "@/lib/authorize-presence";
 import { releasePartnersForPresenceIds } from "@/lib/presence-cleanup";
 import { SESSION_KEY_HEADER } from "@/lib/session-constants";
 import type { PresenceStatus } from "@/lib/presence-state";
+import { computeActivityCounts } from "@/lib/activity";
+import {
+  enrichMatchSnapshot,
+  expirePendingMatches,
+  tryPairSearchers,
+} from "@/lib/match-queue";
+import { parseLanguageList } from "@/lib/languages";
+import { isGenderPref, isGenderValue } from "@/lib/match";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,12 +53,37 @@ export async function GET(request: NextRequest) {
   }
   await prisma.signal.deleteMany({ where: { createdAt: { lt: signalCutoff } } });
 
+  const nowDate = new Date(now);
+  await expirePendingMatches(nowDate);
+  await tryPairSearchers(nowDate);
+
+  const allLive = await prisma.presence.findMany({
+    where: { lastSeen: { gte: staleCutoff } },
+    select: { status: true },
+  });
+  const activity = computeActivityCounts(
+    allLive.map((r) => r.status as PresenceStatus),
+  );
+
+  const selfRow = await prisma.presence.findUnique({
+    where: { id },
+  });
+  const match = selfRow ? await enrichMatchSnapshot(selfRow) : null;
+
   const peers = await prisma.presence.findMany({
     where: {
       id: { not: id },
       lastSeen: { gte: staleCutoff },
     },
-    select: { id: true, lat: true, lng: true, status: true },
+    select: {
+      id: true,
+      lat: true,
+      lng: true,
+      status: true,
+      spokenLanguages: true,
+      gender: true,
+      matchGenderPref: true,
+    },
   });
 
   const inbox = await prisma.signal.findMany({
@@ -63,12 +96,38 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  const preferences = {
+    spokenLanguages: parseLanguageList(selfRow?.spokenLanguages),
+    preferredLanguage: selfRow?.preferredLanguage ?? null,
+    gender: selfRow?.gender && isGenderValue(selfRow.gender)
+      ? selfRow.gender
+      : null,
+  };
+
   const response: PollResponse = {
+    activity,
+    match: match ?? {
+      phase: "idle" as const,
+      language: null,
+      mode: null,
+      youAccepted: false,
+      acceptedCount: 0,
+      expiresAt: null,
+      peerId: null,
+    },
+    preferences,
     peers: peers.map((p) => ({
       id: p.id,
       lat: p.lat,
       lng: p.lng,
       status: p.status as PresenceStatus,
+      spokenLanguages: parseLanguageList(p.spokenLanguages),
+      gender:
+        p.gender && isGenderValue(p.gender) ? p.gender : null,
+      matchGenderPref:
+        p.matchGenderPref && isGenderPref(p.matchGenderPref)
+          ? p.matchGenderPref
+          : null,
     })),
     signals: inbox.map((s) => ({
       id: s.id,
