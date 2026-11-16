@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { authorizePresence } from "@/lib/authorize-presence";
 import {
   handleMatchAccept,
@@ -60,10 +59,6 @@ export async function POST(request: NextRequest) {
 
   if (action === "cancel") {
     await handleMatchCancel(id);
-    await prisma.presence.update({
-      where: { id },
-      data: { matchCooldownUntil: null },
-    });
     return Response.json({ ok: true });
   }
 
@@ -75,10 +70,6 @@ export async function POST(request: NextRequest) {
 
   if (action === "decline") {
     await handleMatchDecline(id);
-    await prisma.presence.update({
-      where: { id },
-      data: { matchCooldownUntil: null },
-    });
     return Response.json({ ok: true });
   }
 

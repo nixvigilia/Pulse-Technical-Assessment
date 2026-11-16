@@ -6,11 +6,12 @@ import {
   hasSpokenLanguages,
   MATCH_ACCEPT_MS,
   sharedSpokenLanguages,
+  shouldDeferSkippedPair,
   type ConnectionMode,
   type GenderPref,
   usersCanMatch,
 } from "@/lib/match";
-import { parseLanguageList, serializeLanguageList } from "@/lib/languages";
+import { serializeLanguageList } from "@/lib/languages";
 import { isGenderValue } from "@/lib/match";
 
 type PresenceRow = {
@@ -26,6 +27,7 @@ type PresenceRow = {
   matchPartnerId: string | null;
   matchExpiresAt: Date | null;
   matchAccepted: boolean;
+  matchSkipPartnerId: string | null;
   lastSeen: Date;
 };
 
@@ -54,6 +56,7 @@ async function resetPairToSearching(
       matchPartnerId: null,
       matchExpiresAt: null,
       matchAccepted: false,
+      ...(partnerId ? { matchSkipPartnerId: partnerId } : {}),
     },
   });
   if (partnerId) {
@@ -65,6 +68,7 @@ async function resetPairToSearching(
         matchPartnerId: null,
         matchExpiresAt: null,
         matchAccepted: false,
+        matchSkipPartnerId: id,
       },
     });
   }
@@ -87,6 +91,11 @@ export async function tryPairSearchers(now: Date): Promise<void> {
     for (const b of searchers) {
       if (b.id === a.id || paired.has(b.id)) continue;
       if (!usersCanMatch(a, b)) continue;
+      if (
+        shouldDeferSkippedPair(a, b, searchers, paired, usersCanMatch, (row) => row)
+      ) {
+        continue;
+      }
       const shared = sharedSpokenLanguages(a.spokenLanguages, b.spokenLanguages);
       if (shared.length === 0) continue;
       const sharedLang = shared[0];
@@ -128,6 +137,7 @@ function pendingData(
     matchAccepted: false,
     matchMode: null,
     matchLanguage: sharedLanguage,
+    matchSkipPartnerId: null,
   };
 }
 
@@ -333,7 +343,10 @@ export async function handleMatchDecline(id: string): Promise<void> {
 
   await prisma.presence.update({
     where: { id },
-    data: clearMatchFields(PRESENCE_STATUS.available),
+    data: {
+      ...clearMatchFields(PRESENCE_STATUS.available),
+      matchSkipPartnerId: partnerId,
+    },
   });
 
   if (partnerId) {
@@ -345,6 +358,7 @@ export async function handleMatchDecline(id: string): Promise<void> {
         matchPartnerId: null,
         matchExpiresAt: null,
         matchAccepted: false,
+        matchSkipPartnerId: id,
       },
     });
   }
@@ -366,7 +380,10 @@ export async function handleMatchCancel(id: string): Promise<void> {
   if (me.status === PRESENCE_STATUS.pending_accept) {
     await prisma.presence.update({
       where: { id },
-      data: clearMatchFields(PRESENCE_STATUS.available),
+      data: {
+        ...clearMatchFields(PRESENCE_STATUS.available),
+        matchSkipPartnerId: partnerId,
+      },
     });
     if (partnerId) {
       await prisma.presence.updateMany({
@@ -377,6 +394,7 @@ export async function handleMatchCancel(id: string): Promise<void> {
           matchPartnerId: null,
           matchExpiresAt: null,
           matchAccepted: false,
+          matchSkipPartnerId: id,
         },
       });
     }
@@ -404,7 +422,6 @@ export async function joinMatchQueue(
     gender?: string | null;
   },
 ): Promise<{ ok: boolean; error?: string }> {
-  const now = new Date();
   let row = await prisma.presence.findUnique({ where: { id } });
   if (!row) {
     return { ok: false, error: "not available" };
@@ -436,10 +453,6 @@ export async function joinMatchQueue(
     row.status === PRESENCE_STATUS.on_call
   ) {
     return { ok: false, error: "in a connection" };
-  }
-
-  if (row.matchCooldownUntil && row.matchCooldownUntil > now) {
-    return { ok: false, error: "cooldown" };
   }
 
   if (!hasSpokenLanguages(row.spokenLanguages)) {

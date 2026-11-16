@@ -37,11 +37,11 @@ export function canReceiveRequest(status: PresenceStatus): boolean {
   return status === PRESENCE_STATUS.available;
 }
 
-/** Map marker / preview styling key. Chat and video both render as amber. */
+/** Map marker / preview styling key. Chat and video both render in tertiary. */
 export function presenceSwatchClass(status: PresenceStatus): string {
   return canReceiveRequest(status)
-    ? "bg-emerald-400 pulse-status-swatch--available"
-    : "bg-amber-400";
+    ? "bg-primary pulse-status-swatch--available"
+    : "bg-tertiary";
 }
 
 export function presenceMarkerClass(status: PresenceStatus): string {

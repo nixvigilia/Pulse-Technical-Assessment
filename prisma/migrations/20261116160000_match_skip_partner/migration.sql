@@ -1,0 +1,1 @@
+ALTER TABLE "Presence" ADD COLUMN "matchSkipPartnerId" TEXT;

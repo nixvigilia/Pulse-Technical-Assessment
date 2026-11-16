@@ -3,6 +3,7 @@ import {
   genderFilterAccepts,
   mutualGenderCompatible,
   sharedSpokenLanguages,
+  shouldDeferSkippedPair,
   usersCanMatch,
 } from "./match";
 
@@ -59,6 +60,37 @@ describe("mutualGenderCompatible", () => {
         { gender: "unspecified", matchGenderPref: "women", ...base },
         { gender: "man", matchGenderPref: "anyone", ...base },
       ),
+    ).toBe(false);
+  });
+});
+
+describe("shouldDeferSkippedPair", () => {
+  const prefs = (id: string, skip: string | null) => ({
+    id,
+    matchSkipPartnerId: skip,
+    spokenLanguages: spokenEn,
+    gender: "man",
+    matchGenderPref: "anyone",
+    matchLanguage: null,
+    matchMode: null,
+  });
+
+  it("defers when another compatible searcher exists", () => {
+    const a = prefs("a", "b");
+    const b = prefs("b", "a");
+    const c = prefs("c", null);
+    const searchers = [a, b, c];
+    expect(
+      shouldDeferSkippedPair(a, b, searchers, new Set(), usersCanMatch, (r) => r),
+    ).toBe(true);
+  });
+
+  it("allows re-pair when they are each other's only option", () => {
+    const a = prefs("a", "b");
+    const b = prefs("b", "a");
+    const searchers = [a, b];
+    expect(
+      shouldDeferSkippedPair(a, b, searchers, new Set(), usersCanMatch, (r) => r),
     ).toBe(false);
   });
 });

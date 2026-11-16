@@ -13,7 +13,7 @@ import {
   tryPairSearchers,
 } from "@/lib/match-queue";
 import { parseLanguageList } from "@/lib/languages";
-import { isGenderValue } from "@/lib/match";
+import { isGenderPref, isGenderValue } from "@/lib/match";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,7 +75,15 @@ export async function GET(request: NextRequest) {
       id: { not: id },
       lastSeen: { gte: staleCutoff },
     },
-    select: { id: true, lat: true, lng: true, status: true },
+    select: {
+      id: true,
+      lat: true,
+      lng: true,
+      status: true,
+      spokenLanguages: true,
+      gender: true,
+      matchGenderPref: true,
+    },
   });
 
   const inbox = await prisma.signal.findMany({
@@ -113,6 +121,13 @@ export async function GET(request: NextRequest) {
       lat: p.lat,
       lng: p.lng,
       status: p.status as PresenceStatus,
+      spokenLanguages: parseLanguageList(p.spokenLanguages),
+      gender:
+        p.gender && isGenderValue(p.gender) ? p.gender : null,
+      matchGenderPref:
+        p.matchGenderPref && isGenderPref(p.matchGenderPref)
+          ? p.matchGenderPref
+          : null,
     })),
     signals: inbox.map((s) => ({
       id: s.id,

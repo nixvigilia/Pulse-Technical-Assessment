@@ -3,7 +3,7 @@ import { computeActivityCounts } from "./activity";
 import { PRESENCE_STATUS } from "./presence-state";
 
 describe("computeActivityCounts", () => {
-  it("classifies online, available, accepting", () => {
+  it("counts everyone not in chat or video as available", () => {
     const counts = computeActivityCounts([
       PRESENCE_STATUS.available,
       PRESENCE_STATUS.busy,
@@ -11,7 +11,6 @@ describe("computeActivityCounts", () => {
       PRESENCE_STATUS.searching,
     ]);
     expect(counts.online).toBe(4);
-    expect(counts.available).toBe(1);
-    expect(counts.accepting).toBe(1);
+    expect(counts.available).toBe(3);
   });
 });

@@ -315,28 +315,30 @@ Details and remediation phases are in `docs/security-review.md`.
 
 ## Rules — Phase 4 (Make it better)
 
-**Branch:** `feat/global-activity`
+I wanted Pulse to feel less empty when you open it — you should sense that other people are on the globe, not just stare at dots. I also wanted a way to meet someone without hunting the map, while still respecting the idea that you only talk to one stranger at a time.
 
 ### 1. Global Activity
 
-- Online users count
-- Available users count
-- Accepting users count
+When I join, I like knowing the app is alive. A small line in the header shows how many people are online and how many could still talk to you (not already in a chat or on video).
+
+The bar is subtle on purpose: it should feel like a heartbeat for the app, not a stats dashboard, and it tucks away on very small screens so the map stays the focus.
 
 ### 2. User Preferences
 
-- Spoken languages (multiple selections)
-- Your gender (optional): Man, Woman, Prefer not to say
-- Connection preference: Anyone, Men, Women
+Random matching only works if you can actually converse, so I ask which languages you speak and require at least one before you search. Gender is optional, and you can say whether you prefer to connect with anyone, men, or women — both sides’ choices have to line up.
+
+You can save languages and gender without starting a search, which is handy if you want to set things up first. When you do that, you get a quick confirmation message and the panel closes so you are back on the map. “Connect with” only applies when you press Random connect, not when you are only saving — saving should not silently put you in a queue with filters you did not mean to use.
 
 ### 3. Random Connection
 
-- Find and match compatible users
-- Match based on shared spoken languages
-- Respect mutual gender preferences
-- Require both users to accept before connecting
-- Support cancel, decline, and match expiration
+The **Random** button opens a panel over the map instead of a new page, because the world map is still the soul of Pulse. While you wait, I tried to make searching feel intentional: a soft pulse, rotating encouraging lines, and a timer so it does not feel frozen. **Stop searching** is the way out while waiting.
+
+Both people have to accept within a short window before chat starts, same idea as tapping someone on the map. If that offer times out and a third person is also searching, I avoid instantly matching the same two again; with only two compatible people left, they can still be paired so nobody is stuck forever.
+
+If you are already in a conversation, **Random** is disabled — one chat at a time, same as the rest of the app.
 
 ### 4. Connection (chat + video)
 
-- Random and map connections both support text chat and optional video (same as map tap-to-connect).
+A random match is still just another stranger on the map: once you both accept, you get the same text chat and optional video as a normal connection. I did not want a second, weaker chat experience.
+
+Small touches from testing: the chat **Send** button had room for its label; if someone declines video, a short line in the chat explains what happened so you are not left guessing.

@@ -5,7 +5,6 @@ export type GenderPref = "anyone" | "men" | "women";
 export type ConnectionMode = "text" | "text_video";
 
 export const MATCH_ACCEPT_MS = 20_000;
-export const MATCH_COOLDOWN_MS = 5_000;
 export const MATCH_JOIN_CAP = 30;
 
 export interface MatchPrefs {
@@ -81,4 +80,47 @@ export function usersCanMatch(a: MatchPrefs, b: MatchPrefs): boolean {
     sharedSpokenLanguages(a.spokenLanguages, b.spokenLanguages).length > 0 &&
     mutualGenderCompatible(a, b)
   );
+}
+
+export interface MatchSkipFields {
+  id: string;
+  matchSkipPartnerId: string | null;
+}
+
+/**
+ * After expire/decline, avoid immediately re-pairing the same duo when other
+ * compatible searchers exist. If they are the only match for each other, allow it.
+ */
+export function shouldDeferSkippedPair<T extends MatchSkipFields & MatchPrefs>(
+  a: T,
+  b: T,
+  searchers: T[],
+  paired: Set<string>,
+  canMatch: (x: MatchPrefs, y: MatchPrefs) => boolean,
+  prefs: (row: T) => MatchPrefs,
+): boolean {
+  const skipped =
+    a.matchSkipPartnerId === b.id || b.matchSkipPartnerId === a.id;
+  if (!skipped) return false;
+
+  const otherForA = searchers.some(
+    (c) =>
+      c.id !== a.id &&
+      c.id !== b.id &&
+      !paired.has(c.id) &&
+      canMatch(prefs(a), prefs(c)) &&
+      a.matchSkipPartnerId !== c.id &&
+      c.matchSkipPartnerId !== a.id,
+  );
+  const otherForB = searchers.some(
+    (c) =>
+      c.id !== a.id &&
+      c.id !== b.id &&
+      !paired.has(c.id) &&
+      canMatch(prefs(b), prefs(c)) &&
+      b.matchSkipPartnerId !== c.id &&
+      c.matchSkipPartnerId !== b.id,
+  );
+
+  return otherForA || otherForB;
 }

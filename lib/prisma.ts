@@ -7,8 +7,12 @@ import { PrismaPg } from "@prisma/adapter-pg";
 // Reuse a single PrismaClient across hot reloads (dev) and warm serverless
 // invocations to avoid exhausting Postgres connections. Use a *pooled*
 // connection string for DATABASE_URL in production (PgBouncer / Neon pooler).
+/** Bump when Presence fields in `prisma/schema.prisma` change (after `prisma generate`). */
+const PRESENCE_CLIENT_GEN = 3;
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
+  presenceClientGen?: number;
 };
 
 function createClient() {
@@ -26,8 +30,24 @@ function createClient() {
   });
 }
 
-export const prisma = globalForPrisma.prisma ?? createClient();
+function getPrismaClient(): PrismaClient {
+  if (
+    process.env.NODE_ENV !== "production" &&
+    globalForPrisma.presenceClientGen !== PRESENCE_CLIENT_GEN &&
+    globalForPrisma.prisma
+  ) {
+    void globalForPrisma.prisma.$disconnect();
+    globalForPrisma.prisma = undefined;
+  }
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createClient();
+    if (process.env.NODE_ENV !== "production") {
+      globalForPrisma.presenceClientGen = PRESENCE_CLIENT_GEN;
+    }
+  }
+
+  return globalForPrisma.prisma;
 }
+
+export const prisma = getPrismaClient();
