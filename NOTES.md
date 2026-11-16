@@ -180,25 +180,33 @@ I changed the processing order in `lib/webrtc.ts`:
 
 ## Rules — Phase 2 (Make it good)
 
-### 1. Map dots — green and amber only
+### First screen
 
-**What I changed:**
+I wanted a dark “night globe” feel: green highlights, soft glow on main buttons, and text that is easy to read on the map. **Enter Pulse** is simple — a small pulsing dot next to the name, clear errors if location fails, and one button to join.
 
-- **Map UX:** Two colors only:
-  - **Green** — Available
-  - **Amber** — Unavailable – Already in a conversation or video call.
-- **`lib/presence-state.ts`:** `presenceMarkerClass` and `presenceSwatchClass` map everything that is not `available` to the same amber styling; tooltips and the stranger card use the shared unavailable label.
-- **`app/globals.css`:** Removed blue `.pulse-dot--on-call` styles; unavailable dots use `.pulse-dot--unavailable` (same amber pulse as before).
-- **`app/components/WorldMap.tsx`:** Disabled **Request** tooltip uses the same unavailable copy when the peer is busy or on a call.
-- **`lib/presence-state.test.ts`:** Asserts green vs amber visuals and label text.
+### Main layout
 
-**What stayed the same (on purpose):**
+The map fills the screen on initial load. The top bar is slightly blurred. It shows the Pulse name, a short “anonymous session” note, and a small **online / available** line when counts are shown. The **Random** button matches the style of **Enter Pulse**. Chat opens on the right side. Connection and video invites are small cards on top of the map — accept or decline in one step, without extra popups.
 
-- The server still stores `available`, `busy`, and `on_call` on `Presence.status` so video can move both peers to `on_call` and back to `busy` when the call ends (`app/api/signal/route.ts`). Only the **globe** collapses chat and video into one amber state.
+### Dots and cards on the map
 
-**Result:**
+Dots pulse slowly and grow a little when you hover. **Green** means free to talk. **Amber** means busy (in chat or on video). Tap a stranger or yourself to open a frosted card in the middle of the screen. You see their status, **Request** and **Close**, and hints when a request is not allowed.
 
-- The map reads at a glance: open to connect (green) or not (amber), without a third color that duplicated “unavailable.”
+### Connection line on the globe
+
+When you request someone, wait on a random match, or are already in chat, a curved green arc runs from your dot to theirs across the globe. A small moving highlight travels along the arc. The map tilts a little while you are linked, then settles flat again when the connection ends.
+
+### Chat and video
+
+New messages scroll into view. **Send**, **Video**, and **End chat** are easy to spot. The **Send** label fits on the button. If someone says no to video, the chat shows a short note so you know what happened. During a call, chat hides so the video and **End video** stay visible on screen.
+
+### Random panel
+
+Opening **Random** shows a panel over the map, not a new page. While you wait, there is a simple “searching” animation, friendly rotating messages, a timer, and a countdown when you both must accept. Buttons make clear the difference between **save preferences**, **start searching**, and **stop searching**. If you are already in chat, **Random** is greyed out with a short explanation. Language and gender lines on dots use the same card style as stranger details.
+
+### Online counts in the header
+
+The header shows **online** and **available** counts in a small, quiet line — not like a stats page. On very small phones it hides so the map stays the main focus.
 
 ---
 
@@ -315,30 +323,34 @@ Details and remediation phases are in `docs/security-review.md`.
 
 ## Rules — Phase 4 (Make it better)
 
-I wanted Pulse to feel less empty when you open it — you should sense that other people are on the globe, not just stare at dots. I also wanted a way to meet someone without hunting the map, while still respecting the idea that you only talk to one stranger at a time.
+### Why I built it
 
-### 1. Global Activity
+Clicking dots on a big map is fun, but it can feel empty or random. I added three things that work together: tell you **how many people are here**, let you say **how you want to meet**, and **match you with a stranger** who fits — then put you in the **same chat and video** you already get from the map. I did not build a second, weaker chat.
 
-When I join, I like knowing the app is alive. A small line in the header shows how many people are online and how many could still talk to you (not already in a chat or on video).
+### Global Activity
 
-The bar is subtle on purpose: it should feel like a heartbeat for the app, not a stats dashboard, and it tucks away on very small screens so the map stays the focus.
+Each poll tells the app how many people are **online** and how many are **available** (not in chat or video yet). No scores, no profiles. The point is simple: you can see the globe is not empty.
 
-### 2. User Preferences
+### User Preferences
 
-Random matching only works if you can actually converse, so I ask which languages you speak and require at least one before you search. Gender is optional, and you can say whether you prefer to connect with anyone, men, or women — both sides’ choices have to line up.
+To use **Random**, you pick at least one **language** you speak. **Gender** is optional. You can also say if you want to match with anyone, men, or women. Both people must share a language and fit each other’s choice. Nothing is verified and nothing is kept after the tab closes — it only helps this session.
 
-You can save languages and gender without starting a search, which is handy if you want to set things up first. When you do that, you get a quick confirmation message and the panel closes so you are back on the map. “Connect with” only applies when you press Random connect, not when you are only saving — saving should not silently put you in a queue with filters you did not mean to use.
+You can **save** language and gender without searching. The “who to connect with” filter applies only when you press **Random connect**, not when you only save, so saving does not put you in line by surprise.
 
-### 3. Random Connection
+If someone shared prefs, you can see them on their dot before you send a request.
 
-The **Random** button opens a panel over the map instead of a new page, because the world map is still the soul of Pulse. While you wait, I tried to make searching feel intentional: a soft pulse, rotating encouraging lines, and a timer so it does not feel frozen. **Stop searching** is the way out while waiting.
+### Random Connection
 
-Both people have to accept within a short window before chat starts, same idea as tapping someone on the map. If that offer times out and a third person is also searching, I avoid instantly matching the same two again; with only two compatible people left, they can still be paired so nobody is stuck forever.
+**Random** puts you in a waiting list. The server pairs people who match, then both must **accept within a time limit**, like tapping a dot on the map. You can stop searching anytime. Matches can time out or be declined.
 
-If you are already in a conversation, **Random** is disabled — one chat at a time, same as the rest of the app.
+If two people keep saying no to each other and someone else is also waiting, I try **not** to match that same pair again right away. If only two compatible people are left, they can still match so nobody waits forever.
 
-### 4. Connection (chat + video)
+You can only have **one chat at a time**, same as map requests.
 
-A random match is still just another stranger on the map: once you both accept, you get the same text chat and optional video as a normal connection. I did not want a second, weaker chat experience.
+### Same chat and video as the map
 
-Small touches from testing: the chat **Send** button had room for its label; if someone declines video, a short line in the chat explains what happened so you are not left guessing.
+When you both accept, the app uses the same connect flow as a normal map request. Your match is still a dot on the map with a line between you. Random is just another way to find that dot.
+
+### What I would do with more time
+
+Show roughly how long you might wait. Looser language rules (for example “English is OK”). Simple interest tags for one session only. Limits so people cannot spam match over and over. Still no accounts, still no history.
