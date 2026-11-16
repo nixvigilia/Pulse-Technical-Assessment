@@ -4,6 +4,8 @@ export const PRESENCE_STATUS = {
   available: "available",
   busy: "busy",
   on_call: "on_call",
+  searching: "searching",
+  pending_accept: "pending_accept",
 } as const;
 
 export type PresenceStatus =
@@ -16,13 +18,17 @@ export const PRESENCE_LABEL: Record<PresenceStatus, string> = {
   available: "Available",
   busy: UNAVAILABLE_LABEL,
   on_call: UNAVAILABLE_LABEL,
+  searching: UNAVAILABLE_LABEL,
+  pending_accept: UNAVAILABLE_LABEL,
 };
 
 export function isValidPresenceStatus(value: unknown): value is PresenceStatus {
   return (
     value === PRESENCE_STATUS.available ||
     value === PRESENCE_STATUS.busy ||
-    value === PRESENCE_STATUS.on_call
+    value === PRESENCE_STATUS.on_call ||
+    value === PRESENCE_STATUS.searching ||
+    value === PRESENCE_STATUS.pending_accept
   );
 }
 

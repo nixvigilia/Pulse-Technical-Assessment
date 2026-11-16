@@ -306,3 +306,31 @@ Details and remediation phases are in `docs/security-review.md`.
 ---
 
 ## Rules — Phase 4 (Make it better)
+
+**Branch:** `feat/global-activity`
+
+Scope (also in `docs/phase-4.md`):
+
+### 1. Global Activity
+
+- Online users count
+- Available users count
+- Accepting users count
+
+### 2. User Preferences
+
+- Spoken languages (multiple selections)
+- Your gender (optional): Man, Woman, Prefer not to say
+- Connection preference: Anyone, Men, Women
+
+### 3. Random Connection
+
+- Find and match compatible users
+- Match based on shared spoken languages
+- Respect mutual gender preferences
+- Require both users to accept before connecting
+- Support cancel, decline, and match expiration
+
+### 4. Connection (chat + video)
+
+- Random and map connections both support text chat and optional video (same as map tap-to-connect).

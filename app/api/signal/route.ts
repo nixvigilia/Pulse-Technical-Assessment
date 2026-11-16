@@ -129,7 +129,17 @@ export async function POST(request: NextRequest) {
   } else if (signalType === "decline" || signalType === "end") {
     await prisma.presence.updateMany({
       where: { id: { in: [fromId, toId] } },
-      data: { status: PRESENCE_STATUS.available, peerId: null },
+      data: {
+        status: PRESENCE_STATUS.available,
+        peerId: null,
+        matchMode: null,
+        matchLanguage: null,
+        matchGenderPref: null,
+        matchId: null,
+        matchPartnerId: null,
+        matchExpiresAt: null,
+        matchAccepted: false,
+      },
     });
   } else if (signalType === "call-start") {
     const transitioned = await prisma.$transaction(async (tx) => {
