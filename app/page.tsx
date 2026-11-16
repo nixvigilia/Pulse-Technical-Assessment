@@ -548,6 +548,12 @@ export default function Home() {
               gender: prefs.gender,
             });
             setPreferences(prefs);
+            setRandomOpen(false);
+            showNotice("Preferences saved.");
+          } catch (e) {
+            showNotice(
+              e instanceof Error ? e.message : "Could not save preferences.",
+            );
           } finally {
             setMatchBusy(false);
           }

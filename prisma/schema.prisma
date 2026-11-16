@@ -42,6 +42,7 @@ model Presence {
   matchExpiresAt     DateTime?
   matchAccepted      Boolean   @default(false)
   matchCooldownUntil DateTime?
+  matchSkipPartnerId String? // do not immediately re-pair after expire/decline if others exist
 
   @@index([lastSeen])
   @@index([peerId])
