@@ -325,6 +325,12 @@ fetch("/api/leave", {
 
 Details and remediation phases are in `docs/security-review.md`.
 
+### Phase 3 blocker
+
+I have **not started** **SEC-002**, **SEC-004**, or the rest of the open items yet. **SEC-001** and **SEC-003** are fixed and written up above.
+
+My AI coding assistant could probably land the remaining fixes quickly, but I am **holding off on purpose**: I want to see the **root cause** of each issue (reproduce it, trace it in the code, understand why the server allowed it) **before** I accept a patch. Some of that work is slow — a few issues took me **hours** just to reproduce or walk through by hand (two windows, timing, refresh/close tab, reading poll traffic). Until then, everything in `docs/security-review.md` **can still be reproduced**; I have not written my own repro notes here for SEC-002 / SEC-004 onward.
+
 ---
 
 ## Rules — Phase 4 (Make it better)
