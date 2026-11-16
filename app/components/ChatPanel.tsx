@@ -13,15 +13,19 @@ export default function ChatPanel({
   messages,
   connected,
   videoBusy,
+  overVideo = false,
   onSend,
   onStartVideo,
+  onHideChat,
   onEnd,
 }: {
   messages: ChatMessage[];
   connected: boolean;
   videoBusy: boolean;
+  overVideo?: boolean;
   onSend: (text: string) => void;
   onStartVideo?: () => void;
+  onHideChat?: () => void;
   onEnd: () => void;
 }) {
   const [draft, setDraft] = useState("");
@@ -40,7 +44,11 @@ export default function ChatPanel({
   }
 
   return (
-    <aside className="absolute bottom-0 right-0 top-16 z-20 flex w-full max-w-md flex-col bg-surface-container-low/95 text-on-surface shadow-[-8px_0_32px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
+    <aside
+      className={`absolute bottom-0 right-0 top-16 flex w-full max-w-md flex-col bg-surface-container-low/95 text-on-surface shadow-[-8px_0_32px_rgba(0,0,0,0.6)] backdrop-blur-2xl ${
+        overVideo ? "z-40" : "z-20"
+      }`}
+    >
       <header className="flex h-16 items-center justify-between bg-surface-container-lowest/60 px-4">
         <div className="min-w-0">
           <p className="font-sans text-sm font-semibold">Private chat</p>
@@ -49,6 +57,15 @@ export default function ChatPanel({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {onHideChat && (
+            <button
+              type="button"
+              onClick={onHideChat}
+              className="rounded-full bg-surface-container-high px-3 py-1.5 font-sans text-[13px] font-medium text-on-surface-variant transition hover:bg-surface-bright hover:text-on-surface"
+            >
+              Hide chat
+            </button>
+          )}
           {onStartVideo && (
             <button
               type="button"
@@ -59,13 +76,15 @@ export default function ChatPanel({
               Video
             </button>
           )}
-          <button
-            type="button"
-            onClick={onEnd}
-            className="rounded-full bg-error-container px-3 py-1.5 font-sans text-[13px] font-medium text-white transition hover:bg-red-600"
-          >
-            End
-          </button>
+          {!overVideo && (
+            <button
+              type="button"
+              onClick={onEnd}
+              className="rounded-full bg-error-container px-3 py-1.5 font-sans text-[13px] font-medium text-white transition hover:bg-red-600"
+            >
+              End
+            </button>
+          )}
         </div>
       </header>
 
