@@ -10,19 +10,19 @@ export type PulseGlobeTheme = {
   fog: FogSpecification;
 };
 
-/** Dark cyan “route globe” palette aligned with Pulse. */
+/** Nocturnal emerald / cyan globe, aligned with the Pulse surface palette. */
 export const PULSE_GLOBE_THEME: PulseGlobeTheme = {
-  arc: "#06b6d4",
-  arcCore: "#67e8f9",
-  comet: "#f0fdfa",
-  cometTrail: "#22d3ee",
-  endpoint: "#a5f3fc",
-  globeDot: "rgba(148, 163, 184, 0.28)",
+  arc: "#4cd7f6",
+  arcCore: "#acedff",
+  comet: "#e0f2fe",
+  cometTrail: "#4edea3",
+  endpoint: "#4edea3",
+  globeDot: "rgba(187, 202, 191, 0.28)",
   fog: {
-    color: "rgb(9, 9, 12)",
-    "high-color": "#155e75",
-    "horizon-blend": 0.05,
-    "space-color": "#000000",
-    "star-intensity": 0.65,
+    color: "rgb(16, 20, 25)",
+    "high-color": "#0e3d32",
+    "horizon-blend": 0.08,
+    "space-color": "#0a0e13",
+    "star-intensity": 0.55,
   },
 };

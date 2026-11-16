@@ -19,7 +19,7 @@ const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "pk.eyJ1IjoicHVsc2UtbWFwIi
 
 const ARC_STEPS = 48;
 const COMET_CYCLE_MS = 3600;
-const ARC = "#22d3ee";
+const ARC = "#4cd7f6";
 
 function shortId(id: string): string {
   return id.length > 8 ? `${id.slice(0, 8)}…` : id;
@@ -156,7 +156,7 @@ export default function WorldMap({
         const el = document.createElement("div");
         el.className = "pulse-me";
         el.title = "You are here";
-        el.innerHTML = `<span class="pulse-me-label">Me</span>📍`;
+        el.innerHTML = `<span class="pulse-me-label">You</span><span class="pulse-me-dot"></span>`;
         meMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: "bottom" })
           .setLngLat([me.lng, me.lat])
           .addTo(map);
@@ -322,7 +322,7 @@ export default function WorldMap({
       const end = pts[ARC_STEPS];
       const start = pts[0];
       ctx.globalAlpha = 1;
-      ctx.fillStyle = "#e0f2fe";
+      ctx.fillStyle = "#4edea3";
       ctx.beginPath();
       ctx.arc(end.x, end.y, 3.2, 0, Math.PI * 2);
       ctx.fill();
@@ -359,8 +359,8 @@ export default function WorldMap({
     selected && activePeerId !== null && selected.id === activePeerId;
 
   return (
-    <div className="absolute inset-0">
-      <div ref={containerRef} className="h-full w-full bg-zinc-900" />
+    <div className="absolute inset-x-0 bottom-0 top-16">
+      <div ref={containerRef} className="h-full w-full bg-surface" />
       <canvas
         ref={linkCanvasRef}
         className="pointer-events-none absolute inset-0 z-[5] h-full w-full"
@@ -369,25 +369,25 @@ export default function WorldMap({
 
       {!TOKEN && (
         <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
-          <p className="max-w-md rounded-lg bg-zinc-800 p-4 text-sm text-zinc-200">
+          <p className="max-w-md rounded-xl bg-surface-container p-4 text-sm text-on-surface">
             Set{" "}
-            <code className="text-emerald-400">NEXT_PUBLIC_MAPBOX_TOKEN</code> in{" "}
+            <code className="text-primary">NEXT_PUBLIC_MAPBOX_TOKEN</code> in{" "}
             <code>.env</code> to load the map.
           </p>
         </div>
       )}
 
       {selected && (
-        <div className="absolute left-1/2 top-20 z-30 w-full max-w-sm -translate-x-1/2 px-4">
-          <div className="rounded-2xl border border-zinc-700/80 bg-zinc-900/95 p-4 text-zinc-100 shadow-xl backdrop-blur">
+        <div className="absolute left-1/2 top-4 z-30 w-full max-w-sm -translate-x-1/2 px-4">
+          <div className="rounded-xl bg-surface-container/95 p-4 text-on-surface shadow-[0_16px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl">
             {isActiveMatch ? (
               <>
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                <p className="font-sans text-[11px] font-medium uppercase tracking-wider text-outline">
                   Your match
                 </p>
-                <p className="mt-2 flex items-center gap-2 text-sm text-emerald-300">
+                <p className="mt-2 flex items-center gap-2 text-sm text-primary">
                   <span
-                    className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400"
+                    className="inline-block size-2.5 rounded-full bg-primary shadow-[0_0_8px_#4edea3]"
                     aria-hidden
                   />
                   <span>In this chat</span>
@@ -395,22 +395,22 @@ export default function WorldMap({
                 <button
                   type="button"
                   onClick={() => setSelected(null)}
-                  className="mt-4 w-full rounded-full border border-zinc-600 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500"
+                  className="mt-4 w-full rounded-lg bg-surface-container-high px-3 py-2 font-sans text-sm text-on-surface-variant transition hover:text-on-surface"
                 >
                   Close
                 </button>
               </>
             ) : (
               <>
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                <p className="font-sans text-[11px] font-medium uppercase tracking-wider text-outline">
                   Stranger
                 </p>
-                <p className="mt-1 font-mono text-sm text-zinc-300">
+                <p className="mt-1 font-mono text-sm tracking-wide text-on-surface">
                   {shortId(selected.id)}
                 </p>
-                <p className="mt-2 flex items-start gap-2 text-sm leading-snug">
+                <p className="mt-2 flex items-start gap-2 text-sm leading-snug text-on-surface-variant">
                   <span
-                    className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${presenceSwatchClass(selected.status)}`}
+                    className={`mt-1 inline-block size-2.5 shrink-0 rounded-full ${presenceSwatchClass(selected.status)}`}
                     aria-hidden
                   />
                   <span>{PRESENCE_LABEL[selected.status]}</span>
@@ -419,7 +419,7 @@ export default function WorldMap({
                   <button
                     type="button"
                     onClick={() => setSelected(null)}
-                    className="flex-1 rounded-full border border-zinc-600 px-3 py-2 text-sm text-zinc-300 hover:border-zinc-500"
+                    className="flex-1 rounded-lg bg-surface-container-high px-3 py-2 font-sans text-sm text-on-surface-variant transition hover:text-on-surface"
                   >
                     Close
                   </button>
@@ -438,7 +438,7 @@ export default function WorldMap({
                       onPeerConnect(selected.id);
                       setSelected(null);
                     }}
-                    className="flex-1 rounded-full bg-emerald-400 px-3 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-zinc-600 disabled:text-zinc-400"
+                    className="flex-1 rounded-lg bg-primary-container px-3 py-2 font-sans text-sm font-medium text-on-primary shadow-[0_0_12px_rgba(16,185,129,0.3)] transition hover:bg-primary disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-outline disabled:shadow-none"
                   >
                     Request
                   </button>

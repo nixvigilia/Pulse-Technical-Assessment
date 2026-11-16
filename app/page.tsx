@@ -124,6 +124,13 @@ export default function Home() {
     setMessages((prev) => [...prev, { id: msgId.current++, mine, text }]);
   }
 
+  function addSystemMessage(text: string) {
+    setMessages((prev) => [
+      ...prev,
+      { id: msgId.current++, mine: false, text, system: true },
+    ]);
+  }
+
   function teardown(message?: string) {
     if (requestTimer.current) clearTimeout(requestTimer.current);
     peerRef.current?.close();
@@ -213,6 +220,7 @@ export default function Home() {
       case "video-decline":
         if (videoRef.current === "requesting") {
           setVideo("none");
+          addSystemMessage("Stranger declined the video call.");
           showNotice("Video declined.");
         }
         break;
@@ -297,6 +305,7 @@ export default function Home() {
   function declineVideo() {
     peerRef.current?.sendControl("video-decline");
     setVideo("none");
+    addSystemMessage("You declined the video call.");
   }
 
   function endVideo() {
@@ -489,16 +498,29 @@ export default function Home() {
       : null) ??
     (match.phase === "pending" && match.peerId ? match.peerId : null);
   return (
-    <main className="fixed inset-0 overflow-hidden">
-      <ActivityBar activity={activity} />
-
-      <button
-        type="button"
-        onClick={() => setRandomOpen(true)}
-        className="absolute right-4 top-4 z-20 rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 shadow-lg hover:bg-emerald-300"
-      >
-        Random
-      </button>
+    <main className="fixed inset-0 overflow-hidden bg-surface text-on-surface">
+      <header className="fixed inset-x-0 top-0 z-50 flex h-16 items-center justify-between gap-3 bg-surface-container-lowest/80 px-4 shadow-[0_4px_24px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="size-2.5 rounded-full bg-primary shadow-[0_0_10px_#4edea3]" />
+            <span className="font-sans text-xl font-semibold tracking-tight">Pulse</span>
+          </div>
+          <ActivityBar activity={activity} />
+          <div className="hidden items-center gap-1.5 rounded-full bg-surface-container-low/50 px-2.5 py-1 lg:flex">
+            <span className="font-sans text-[11px] font-medium uppercase tracking-wider text-outline">
+              Session
+            </span>
+            <span className="font-mono text-xs tracking-wide">Anonymous</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setRandomOpen(true)}
+          className="shrink-0 rounded-full bg-primary-container px-4 py-1.5 font-sans text-[13px] font-medium text-on-primary shadow-[0_0_12px_rgba(16,185,129,0.3)] transition hover:bg-primary"
+        >
+          Random
+        </button>
+      </header>
 
       <WorldMap
         peers={peers}
@@ -582,17 +604,18 @@ export default function Home() {
       />
 
       {notice && (
-        <div className="absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
+        <div className="absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-full bg-surface-container/90 px-4 py-2 text-sm text-on-surface shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           {notice}
         </div>
       )}
 
       {conn.kind === "requesting" && (
-        <div className="absolute left-1/2 top-20 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
+        <div className="absolute left-1/2 top-20 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-surface-container/90 px-4 py-2 text-sm text-on-surface shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <span className="size-2 animate-pulse rounded-full bg-secondary shadow-[0_0_8px_#4cd7f6]" />
           <span>Requesting connection…</span>
           <button
             onClick={cancelRequest}
-            className="rounded-full bg-zinc-700 px-3 py-1 text-xs hover:bg-zinc-600"
+            className="rounded-full bg-surface-container-high px-3 py-1 font-sans text-xs text-on-surface-variant transition hover:text-on-surface"
           >
             Cancel
           </button>
@@ -624,7 +647,8 @@ export default function Home() {
       )}
 
       {video === "requesting" && (
-        <div className="absolute bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
+        <div className="absolute bottom-24 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-surface-container/90 px-4 py-2 text-sm text-on-surface shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <span className="size-2 animate-pulse rounded-full bg-primary shadow-[0_0_8px_#4edea3]" />
           Waiting for stranger to accept video…
         </div>
       )}

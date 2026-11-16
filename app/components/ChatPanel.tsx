@@ -6,6 +6,7 @@ export interface ChatMessage {
   id: number;
   mine: boolean;
   text: string;
+  system?: boolean;
 }
 
 export default function ChatPanel({
@@ -39,74 +40,105 @@ export default function ChatPanel({
   }
 
   return (
-    <div className="absolute inset-y-0 right-0 z-20 flex w-full max-w-md flex-col border-l border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl">
-      <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <div>
-          <p className="font-semibold">Stranger</p>
-          <p className="text-xs text-zinc-500">
+    <aside className="absolute bottom-0 right-0 top-16 z-20 flex w-full max-w-md flex-col bg-surface-container-low/95 text-on-surface shadow-[-8px_0_32px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
+      <header className="flex h-16 items-center justify-between bg-surface-container-lowest/60 px-4">
+        <div className="min-w-0">
+          <p className="font-sans text-sm font-semibold">Private chat</p>
+          <p className="font-mono text-[11px] tracking-wide text-outline">
             {connected ? "Connected" : "Connecting…"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           {onStartVideo && (
             <button
+              type="button"
               onClick={onStartVideo}
               disabled={!connected || videoBusy}
-              className="rounded-full border border-zinc-700 px-3 py-1.5 text-sm hover:border-zinc-500 disabled:opacity-40"
+              className="rounded-full bg-surface-container-high px-3 py-1.5 font-sans text-[13px] font-medium text-primary transition hover:bg-surface-bright disabled:opacity-40"
             >
               Video
             </button>
           )}
           <button
+            type="button"
             onClick={onEnd}
-            className="rounded-full bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400"
+            className="rounded-full bg-error-container px-3 py-1.5 font-sans text-[13px] font-medium text-white transition hover:bg-red-600"
           >
             End
           </button>
         </div>
       </header>
 
-      <div className="flex-1 space-y-2 overflow-y-auto p-4">
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4 text-sm">
+        <div className="py-1 text-center">
+          <span className="inline-block rounded-full bg-surface-container/50 px-3 py-1 font-mono text-[11px] tracking-wide text-outline">
+            Private · Messages disappear when you leave
+          </span>
+        </div>
         {messages.length === 0 && (
-          <p className="mt-8 text-center text-sm text-zinc-500">
+          <p className="mt-6 text-center text-sm text-on-surface-variant">
             Say hello. Messages are peer-to-peer and never stored.
           </p>
         )}
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`flex ${m.mine ? "justify-end" : "justify-start"}`}
-          >
-            <span
-              className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                m.mine
-                  ? "bg-emerald-400 text-zinc-950"
-                  : "bg-zinc-800 text-zinc-100"
-              }`}
+        {messages.map((m) =>
+          m.system ? (
+            <p
+              key={m.id}
+              className="self-center rounded-full bg-surface-container/70 px-3 py-1 text-center text-xs text-on-surface-variant"
             >
               {m.text}
-            </span>
-          </div>
-        ))}
+            </p>
+          ) : (
+            <div
+              key={m.id}
+              className={`flex max-w-[85%] flex-col gap-1 ${
+                m.mine ? "items-end self-end" : "self-start"
+              }`}
+            >
+              <span
+                className={`font-sans text-[11px] font-medium tracking-wide ${
+                  m.mine ? "text-secondary" : "text-primary"
+                }`}
+              >
+                {m.mine ? "You" : "Stranger"}
+              </span>
+              <span
+                className={`rounded-xl px-3 py-2 text-sm ${
+                  m.mine
+                    ? "bg-primary-container font-medium text-on-primary"
+                    : "bg-surface-container text-on-surface"
+                }`}
+              >
+                {m.text}
+              </span>
+            </div>
+          ),
+        )}
         <div ref={endRef} />
       </div>
 
-      <form onSubmit={submit} className="flex gap-2 border-t border-zinc-800 p-3">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={connected ? "Type a message…" : "Connecting…"}
-          disabled={!connected}
-          className="flex-1 rounded-full bg-zinc-900 px-4 py-2 text-sm outline-none placeholder:text-zinc-600 focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
-        />
-        <button
-          type="submit"
-          disabled={!connected || !draft.trim()}
-          className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-40"
-        >
-          Send
-        </button>
+      <form
+        onSubmit={submit}
+        className="bg-surface-container-lowest/80 p-4"
+      >
+        <div className="flex items-center gap-2 rounded-xl bg-surface-container-lowest py-1.5 pr-1.5 pl-3">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={connected ? "Type a message…" : "Connecting…"}
+            disabled={!connected}
+            className="min-w-0 flex-1 bg-transparent text-sm text-on-surface outline-none placeholder:text-outline-variant disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={!connected || !draft.trim()}
+            className="shrink-0 rounded-lg bg-primary-container px-3.5 py-1.5 font-sans text-[13px] font-medium text-on-primary transition hover:bg-primary disabled:opacity-40"
+            aria-label="Send"
+          >
+            Send
+          </button>
+        </div>
       </form>
-    </div>
+    </aside>
   );
 }

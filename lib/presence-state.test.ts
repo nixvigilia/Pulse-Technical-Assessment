@@ -55,7 +55,7 @@ describe("video presence transitions", () => {
 });
 
 describe("presence visuals", () => {
-  it("uses green for available and amber for chat or video", () => {
+  it("uses green for available and rose for chat or video", () => {
     expect(presenceMarkerClass(PRESENCE_STATUS.available)).toContain(
       "available",
     );
@@ -63,11 +63,9 @@ describe("presence visuals", () => {
     expect(presenceMarkerClass(PRESENCE_STATUS.on_call)).toContain(
       "unavailable",
     );
-    expect(presenceSwatchClass(PRESENCE_STATUS.available)).toContain(
-      "emerald",
-    );
-    expect(presenceSwatchClass(PRESENCE_STATUS.busy)).toContain("amber");
-    expect(presenceSwatchClass(PRESENCE_STATUS.on_call)).toContain("amber");
+    expect(presenceSwatchClass(PRESENCE_STATUS.available)).toContain("primary");
+    expect(presenceSwatchClass(PRESENCE_STATUS.busy)).toContain("tertiary");
+    expect(presenceSwatchClass(PRESENCE_STATUS.on_call)).toContain("tertiary");
   });
 
   it("labels occupied peers as unavailable", () => {

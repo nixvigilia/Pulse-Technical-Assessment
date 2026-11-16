@@ -28,7 +28,7 @@ const SEARCH_MSG_HOLD_MS = 3500;
 const SEARCH_MSG_FADE_MS = 320;
 
 function WaitDots({
-  className = "bg-emerald-400/75",
+  className = "bg-primary/80",
   size = "size-2",
 }: {
   className?: string;
@@ -47,14 +47,42 @@ function WaitDots({
   );
 }
 
-function SearchPulse() {
+function SearchRadar() {
   return (
     <div
-      className="mb-3 flex items-center justify-center gap-1.5"
+      className="relative mx-auto flex size-28 items-center justify-center"
       aria-hidden
     >
-      <WaitDots />
+      <span className="search-radar-ring" />
+      <span className="search-radar-ring search-radar-ring-delay" />
+      <span className="absolute size-16 rounded-full bg-primary/10" />
+      <span className="absolute size-2.5 rounded-full bg-primary shadow-[0_0_18px_rgba(78,222,163,0.85)]" />
     </div>
+  );
+}
+
+function SearchElapsed() {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const started = Date.now();
+    const id = setInterval(() => {
+      setSeconds(Math.floor((Date.now() - started) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  const label =
+    minutes > 0
+      ? `${minutes}:${rest.toString().padStart(2, "0")}`
+      : `${seconds}s`;
+
+  return (
+    <p className="font-mono text-[11px] tracking-wide text-outline">
+      Searching for {label}
+    </p>
   );
 }
 
@@ -78,7 +106,7 @@ function MatchAcceptExpiryLine({ expiresAt }: { expiresAt: string }) {
 
   return (
     <div
-      className="mt-3 h-0.5 w-full overflow-hidden rounded-full bg-amber-950/60"
+      className="mt-3 h-1 w-full overflow-hidden rounded-full bg-surface-container-highest"
       role="progressbar"
       aria-valuemin={0}
       aria-valuemax={100}
@@ -86,7 +114,7 @@ function MatchAcceptExpiryLine({ expiresAt }: { expiresAt: string }) {
       aria-label="Time left to accept"
     >
       <div
-        className="h-full rounded-full bg-amber-300/90 transition-[width] duration-100 ease-linear"
+        className="h-full rounded-full bg-secondary transition-[width] duration-100 ease-linear"
         style={{ width: `${remainingRatio * 100}%` }}
       />
     </div>
@@ -130,7 +158,7 @@ function RotatingSearchMessage() {
     <p
       role="status"
       aria-live="polite"
-      className={`min-h-[2.75rem] text-center leading-snug text-zinc-300 transition-opacity duration-300 ease-in-out ${
+      className={`min-h-[3.25rem] text-center font-body text-[15px] leading-snug text-on-surface transition-opacity duration-300 ease-in-out ${
         fading ? "opacity-0" : "opacity-100"
       }`}
     >
@@ -222,11 +250,11 @@ export default function RandomConnect({
 
   return (
     <div
-      className="absolute inset-0 z-40 flex items-end justify-center bg-zinc-950/50 p-4 backdrop-blur-sm sm:items-center"
+      className="absolute inset-0 z-40 flex items-end justify-center bg-surface-container-lowest/50 p-4 backdrop-blur-sm sm:items-center"
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-900 p-5 text-zinc-100 shadow-2xl"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-surface-container/95 p-5 text-on-surface shadow-[0_16px_40px_rgba(0,0,0,0.8)] backdrop-blur-2xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -235,15 +263,15 @@ export default function RandomConnect({
             type="button"
             disabled={busy && inQueue}
             onClick={() => void handleClose()}
-            className="rounded-full border border-zinc-600 px-3 py-1 text-xs text-zinc-400 hover:border-zinc-500 disabled:opacity-50"
+            className="rounded-lg bg-surface-container-high px-3 py-1 font-sans text-[13px] text-on-surface-variant transition hover:text-on-surface disabled:opacity-50"
           >
             Close
           </button>
         </div>
 
         {match.phase === "pending" && (
-          <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-            <p className="font-medium text-amber-100">Match found — accept to connect</p>
+          <div className="mb-4 rounded-xl bg-surface-container-high p-4 text-sm">
+            <p className="font-medium text-secondary">Match found — accept to connect</p>
             {match.expiresAt && (
               <MatchAcceptExpiryLine expiresAt={match.expiresAt} />
             )}
@@ -253,7 +281,7 @@ export default function RandomConnect({
                   type="button"
                   disabled={busy}
                   onClick={() => void onAccept()}
-                  className="flex-1 rounded-full bg-emerald-400 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-primary-container py-2 font-sans text-sm font-medium text-on-primary shadow-[0_0_12px_rgba(16,185,129,0.3)] transition hover:bg-primary disabled:opacity-50"
                 >
                   Accept
                 </button>
@@ -261,13 +289,13 @@ export default function RandomConnect({
                   type="button"
                   disabled={busy}
                   onClick={() => void onDecline()}
-                  className="flex-1 rounded-full border border-zinc-600 py-2 text-sm hover:border-zinc-500 disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-surface-container py-2 font-sans text-sm text-on-surface-variant transition hover:text-on-surface disabled:opacity-50"
                 >
                   Decline
                 </button>
               </div>
             ) : (
-              <p className="mt-3 text-center text-xs text-amber-100/90">
+              <p className="mt-3 text-center text-xs text-on-surface-variant">
                 Waiting for the other person…
               </p>
             )}
@@ -275,19 +303,33 @@ export default function RandomConnect({
         )}
 
         {match.phase === "searching" && (
-          <div className="mb-4 rounded-xl border border-zinc-600 bg-zinc-800/50 p-4 text-sm">
-            <SearchPulse />
-            <RotatingSearchMessage />
+          <div className="flex flex-col items-center gap-5 rounded-xl bg-surface-container-high/80 px-5 py-8 text-sm">
+            <SearchRadar />
+            <div className="flex w-full flex-col items-center gap-2">
+              <div className="flex items-center gap-1.5" aria-hidden>
+                <WaitDots size="size-1.5" />
+              </div>
+              <RotatingSearchMessage />
+              <SearchElapsed />
+            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void onCancel()}
+              className="rounded-full bg-surface-container px-5 py-2 font-sans text-xs text-on-surface-variant transition hover:text-on-surface disabled:opacity-50"
+            >
+              Stop searching
+            </button>
           </div>
         )}
 
         {match.phase === "idle" && (
           <>
             <fieldset className="mb-4 space-y-2">
-              <legend className="text-sm font-medium text-zinc-300">
+              <legend className="font-sans text-[13px] font-medium tracking-wide text-on-surface-variant">
                 Spoken languages
               </legend>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-outline">
                 Pick at least one. We match you with someone who shares any of
                 the same languages.
               </p>
@@ -305,10 +347,10 @@ export default function RandomConnect({
                             : [...prev, lang.code],
                         )
                       }
-                      className={`rounded-full px-3 py-1 text-xs ${
+                      className={`rounded-full px-3 py-1 font-sans text-xs ${
                         on
-                          ? "bg-emerald-400 text-zinc-950"
-                          : "border border-zinc-600 text-zinc-300"
+                          ? "bg-primary-container font-medium text-on-primary"
+                          : "bg-surface-container-high text-on-surface-variant"
                       }`}
                     >
                       {lang.label}
@@ -319,13 +361,15 @@ export default function RandomConnect({
             </fieldset>
 
             <label className="mb-3 block text-sm">
-              <span className="text-zinc-300">Your gender (optional)</span>
+              <span className="font-sans text-[13px] text-on-surface-variant">
+                Your gender (optional)
+              </span>
               <select
                 value={gender}
                 onChange={(e) =>
                   setGender(e.target.value as typeof gender)
                 }
-                className="mt-1 w-full rounded-lg border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm"
+                className="mt-1 w-full rounded-lg bg-surface-container-high px-3 py-2 text-sm text-on-surface outline-none"
               >
                 <option value="">Prefer not to say</option>
                 <option value="man">Man</option>
@@ -334,7 +378,9 @@ export default function RandomConnect({
             </label>
 
             <fieldset className="mb-3">
-              <legend className="text-sm text-zinc-300">Connect with</legend>
+              <legend className="font-sans text-[13px] text-on-surface-variant">
+                Connect with
+              </legend>
               <div className="mt-2 flex gap-2">
                 {(
                   [
@@ -347,10 +393,10 @@ export default function RandomConnect({
                     key={v}
                     type="button"
                     onClick={() => setGenderPref(v)}
-                    className={`flex-1 rounded-full py-2 text-xs ${
+                    className={`flex-1 rounded-full py-2 font-sans text-xs ${
                       genderPref === v
-                        ? "bg-emerald-400 text-zinc-950"
-                        : "border border-zinc-600"
+                        ? "bg-primary-container font-medium text-on-primary"
+                        : "bg-surface-container-high text-on-surface-variant"
                     }`}
                   >
                     {label}
@@ -368,12 +414,12 @@ export default function RandomConnect({
               type="button"
               disabled={busy || !canJoin}
               onClick={() => void handleSaveAndMaybeJoin(true)}
-              className="w-full rounded-full bg-emerald-400 py-3 text-sm font-semibold text-zinc-950 hover:bg-emerald-300 disabled:opacity-50"
+              className="w-full rounded-full bg-primary-container py-3 font-sans text-sm font-medium text-on-primary shadow-[0_0_12px_rgba(16,185,129,0.3)] transition hover:bg-primary disabled:opacity-50"
             >
               Random connect
             </button>
             {!canJoin && (
-              <p className="text-center text-xs text-amber-400/90">
+              <p className="text-center text-xs text-error">
                 Select at least one spoken language to search.
               </p>
             )}
@@ -381,7 +427,7 @@ export default function RandomConnect({
               type="button"
               disabled={busy}
               onClick={() => void handleSaveAndMaybeJoin(false)}
-              className="w-full rounded-full border border-zinc-600 py-2 text-xs text-zinc-400 hover:border-zinc-500"
+              className="w-full rounded-full bg-surface-container-high py-2 font-sans text-xs text-on-surface-variant transition hover:text-on-surface"
             >
               Save preferences only
             </button>
@@ -395,11 +441,26 @@ export default function RandomConnect({
 function PanelTitle({ match }: { match: MatchSnapshot }) {
   if (match.phase === "searching") {
     return (
-      <h2 className="text-lg font-semibold">Searching…</h2>
+      <div>
+        <h2 className="font-sans text-lg font-medium tracking-tight">
+          Searching…
+        </h2>
+        <p className="mt-0.5 font-sans text-xs text-on-surface-variant">
+          Matching you with someone who shares a language
+        </p>
+      </div>
     );
   }
   if (match.phase === "pending") {
-    return <h2 className="text-lg font-semibold">Random connection</h2>;
+    return (
+      <h2 className="font-sans text-lg font-medium tracking-tight">
+        Random connection
+      </h2>
+    );
   }
-  return <h2 className="text-lg font-semibold">Random connection</h2>;
+  return (
+    <h2 className="font-sans text-lg font-medium tracking-tight">
+      Random connection
+    </h2>
+  );
 }
