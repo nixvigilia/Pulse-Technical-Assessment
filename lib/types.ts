@@ -33,7 +33,6 @@ export interface SignalMsg {
 export interface ActivityCounts {
   online: number;
   available: number;
-  accepting: number;
 }
 
 export type MatchPhase = "idle" | "searching" | "pending" | "ready";

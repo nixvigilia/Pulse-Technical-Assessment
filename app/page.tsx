@@ -49,7 +49,6 @@ const IDLE_MATCH: MatchSnapshot = {
 const DEFAULT_ACTIVITY: ActivityCounts = {
   online: 0,
   available: 0,
-  accepting: 0,
 };
 
 export default function Home() {

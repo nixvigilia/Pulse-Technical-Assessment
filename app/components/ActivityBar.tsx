@@ -16,13 +16,6 @@ export default function ActivityBar({ activity }: { activity: ActivityCounts }) 
         <strong className="font-medium text-secondary">{activity.available}</strong>{" "}
         available
       </span>
-      <span className="hidden opacity-40 md:inline" aria-hidden>
-        ·
-      </span>
-      <span className="hidden md:inline">
-        <strong className="font-medium text-secondary">{activity.accepting}</strong>{" "}
-        accepting
-      </span>
     </div>
   );
 }

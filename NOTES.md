@@ -320,8 +320,7 @@ Details and remediation phases are in `docs/security-review.md`.
 ### 1. Global Activity
 
 - Online users count
-- Available users count
-- Accepting users count
+- Available users count (not in an active chat or video call)
 
 ### 2. User Preferences
 

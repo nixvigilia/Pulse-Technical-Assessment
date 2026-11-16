@@ -1,7 +1,6 @@
 - **Global Activity**
   - Online users count
-  - Available users count
-  - Accepting users count
+  - Available users count (not in an active chat or video call)
 
 - **User Preferences**
   - Spoken languages (multiple selections)
