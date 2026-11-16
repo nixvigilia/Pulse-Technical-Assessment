@@ -4,7 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { Map as MapboxMap, Marker } from "mapbox-gl";
-import type { PeerDot } from "@/lib/types";
+import type { GenderPref } from "@/lib/match";
+import {
+  connectWithDisplayLabel,
+  genderDisplayLabel,
+  hasPublicPreferences,
+  spokenLanguageLabels,
+} from "@/lib/preference-labels";
+import type { PeerDot, SessionPreferences } from "@/lib/types";
 import { greatCircleCoordinates } from "@/lib/geo-arc";
 import { setConnectionGlobeMode } from "@/lib/mapbox-route-layers";
 import { PULSE_GLOBE_THEME } from "@/lib/pulse-globe-theme";
@@ -25,9 +32,63 @@ function shortId(id: string): string {
   return id.length > 8 ? `${id.slice(0, 8)}…` : id;
 }
 
+function PreferencesDetails({
+  spokenLanguages,
+  gender,
+  matchGenderPref,
+}: {
+  spokenLanguages: string[];
+  gender: SessionPreferences["gender"];
+  matchGenderPref: GenderPref | null;
+}) {
+  if (
+    !hasPublicPreferences({
+      spokenLanguages,
+      gender,
+      matchGenderPref,
+    })
+  ) {
+    return null;
+  }
+
+  const langs = spokenLanguageLabels(spokenLanguages);
+  const genderLabel = genderDisplayLabel(gender);
+  const connectLabel = connectWithDisplayLabel(matchGenderPref);
+
+  return (
+    <dl className="mt-3 space-y-2 border-t border-outline-variant/40 pt-3 text-xs">
+      {langs.length > 0 && (
+        <div>
+          <dt className="font-sans font-medium tracking-wide text-outline">
+            Speaks
+          </dt>
+          <dd className="mt-0.5 text-on-surface">{langs.join(", ")}</dd>
+        </div>
+      )}
+      {genderLabel && (
+        <div>
+          <dt className="font-sans font-medium tracking-wide text-outline">
+            Gender
+          </dt>
+          <dd className="mt-0.5 text-on-surface">{genderLabel}</dd>
+        </div>
+      )}
+      {connectLabel && (
+        <div>
+          <dt className="font-sans font-medium tracking-wide text-outline">
+            Connect with
+          </dt>
+          <dd className="mt-0.5 text-on-surface">{connectLabel}</dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
 export default function WorldMap({
   peers,
   me,
+  myPreferences,
   onPeerConnect,
   canConnect,
   focusPeerId = null,
@@ -36,6 +97,7 @@ export default function WorldMap({
 }: {
   peers: PeerDot[];
   me: { lat: number; lng: number } | null;
+  myPreferences: SessionPreferences;
   onPeerConnect: (id: string) => void;
   canConnect: boolean;
   /** Fly map to this peer once (e.g. after random match). */
@@ -51,6 +113,7 @@ export default function WorldMap({
   const meMarkerRef = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<PeerDot | null>(null);
+  const [selectedMe, setSelectedMe] = useState(false);
 
   const onPeerConnectRef = useRef(onPeerConnect);
   const canConnectRef = useRef(canConnect);
@@ -92,6 +155,7 @@ export default function WorldMap({
 
   useEffect(() => {
     selectPeerRef.current = (peer: PeerDot) => {
+      setSelectedMe(false);
       setSelected((prev) => (prev?.id === peer.id ? null : peer));
     };
   });
@@ -128,7 +192,10 @@ export default function WorldMap({
         setConnectionGlobeMode(map, false, PULSE_GLOBE_THEME);
         setReady(true);
       });
-      map.on("click", () => setSelected(null));
+      map.on("click", () => {
+        setSelected(null);
+        setSelectedMe(false);
+      });
       mapRef.current = map;
     })();
 
@@ -154,9 +221,14 @@ export default function WorldMap({
       if (cancelled) return;
       if (!meMarkerRef.current) {
         const el = document.createElement("div");
-        el.className = "pulse-me";
-        el.title = "You are here";
+        el.className = "pulse-me cursor-pointer";
+        el.title = "Your location — tap for your preferences";
         el.innerHTML = `<span class="pulse-me-label">You</span><span class="pulse-me-dot"></span>`;
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          setSelected(null);
+          setSelectedMe((on) => !on);
+        });
         meMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: "bottom" })
           .setLngLat([me.lng, me.lat])
           .addTo(map);
@@ -415,6 +487,11 @@ export default function WorldMap({
                   />
                   <span>{PRESENCE_LABEL[selected.status]}</span>
                 </p>
+                <PreferencesDetails
+                  spokenLanguages={selected.spokenLanguages}
+                  gender={selected.gender}
+                  matchGenderPref={selected.matchGenderPref}
+                />
                 <div className="mt-4 flex gap-2">
                   <button
                     type="button"
@@ -445,6 +522,37 @@ export default function WorldMap({
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {selectedMe && (
+        <div className="absolute left-1/2 top-4 z-30 w-full max-w-sm -translate-x-1/2 px-4">
+          <div className="rounded-xl bg-surface-container/95 p-4 text-on-surface shadow-[0_16px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl">
+            <p className="font-sans text-[11px] font-medium uppercase tracking-wider text-outline">
+              You
+            </p>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Your saved preferences for this session
+            </p>
+            <PreferencesDetails
+              spokenLanguages={myPreferences.spokenLanguages}
+              gender={myPreferences.gender}
+              matchGenderPref={null}
+            />
+            {myPreferences.spokenLanguages.length === 0 &&
+              !genderDisplayLabel(myPreferences.gender) && (
+                <p className="mt-3 text-xs text-on-surface-variant">
+                  Nothing saved yet. Open <strong className="font-medium text-on-surface">Random</strong> to set languages and gender.
+                </p>
+              )}
+            <button
+              type="button"
+              onClick={() => setSelectedMe(false)}
+              className="mt-4 w-full rounded-lg bg-surface-container-high px-3 py-2 font-sans text-sm text-on-surface-variant transition hover:text-on-surface"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

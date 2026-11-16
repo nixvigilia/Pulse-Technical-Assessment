@@ -59,8 +59,10 @@ export default function EntryGate({
       )}
 
       <p className="relative max-w-sm text-center font-mono text-[11px] tracking-wide text-outline">
-        No sign-up. Your dot is placed 1–3&nbsp;km from your real location.
-        Nothing is stored — closing the tab ends everything.
+        No sign-up. Your dot is placed{" "}
+        <span className="font-medium text-primary">1–3&nbsp;km</span> from your
+        real location — randomized, not exact. Nothing is stored — closing the
+        tab ends everything.
       </p>
     </div>
   );

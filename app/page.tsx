@@ -526,6 +526,7 @@ export default function Home() {
       <WorldMap
         peers={peers}
         me={myLocation}
+        myPreferences={preferences}
         onPeerConnect={requestConnection}
         canConnect={mapConnectIdle}
         focusPeerId={mapFocusPeerId}
