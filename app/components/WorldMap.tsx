@@ -112,8 +112,23 @@ export default function WorldMap({
   const markersRef = useRef<Map<string, Marker>>(new Map());
   const meMarkerRef = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
-  const [selected, setSelected] = useState<PeerDot | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedMe, setSelectedMe] = useState(false);
+  const selected =
+    selectedId === null
+      ? null
+      : (peers.find((p) => p.id === selectedId) ?? null);
+
+  const [prevFocusPeerId, setPrevFocusPeerId] = useState(focusPeerId ?? null);
+  if (focusPeerId && focusPeerId !== prevFocusPeerId) {
+    setPrevFocusPeerId(focusPeerId);
+    if (selectedId !== null) {
+      setSelectedId(null);
+      setSelectedMe(false);
+    }
+  } else if (!focusPeerId && prevFocusPeerId !== null) {
+    setPrevFocusPeerId(null);
+  }
 
   const onPeerConnectRef = useRef(onPeerConnect);
   const canConnectRef = useRef(canConnect);
@@ -140,7 +155,6 @@ export default function WorldMap({
     if (!peer) return;
 
     lastFocusedPeerRef.current = focusPeerId;
-    setSelected(null);
 
     const bounds = new mapboxgl.LngLatBounds();
     bounds.extend([me.lng, me.lat]);
@@ -156,20 +170,9 @@ export default function WorldMap({
   useEffect(() => {
     selectPeerRef.current = (peer: PeerDot) => {
       setSelectedMe(false);
-      setSelected((prev) => (prev?.id === peer.id ? null : peer));
+      setSelectedId((prev) => (prev === peer.id ? null : peer.id));
     };
   });
-
-  // Drop selection if that peer went offline.
-  useEffect(() => {
-    if (!selected) return;
-    const stillHere = peers.some((p) => p.id === selected.id);
-    if (!stillHere) setSelected(null);
-    else {
-      const fresh = peers.find((p) => p.id === selected.id);
-      if (fresh && fresh.status !== selected.status) setSelected(fresh);
-    }
-  }, [peers, selected]);
 
   useEffect(() => {
     if (!TOKEN || !containerRef.current) return;
@@ -193,7 +196,7 @@ export default function WorldMap({
         setReady(true);
       });
       map.on("click", () => {
-        setSelected(null);
+        setSelectedId(null);
         setSelectedMe(false);
       });
       mapRef.current = map;
@@ -226,7 +229,7 @@ export default function WorldMap({
         el.innerHTML = `<span class="pulse-me-label">You</span><span class="pulse-me-dot"></span>`;
         el.addEventListener("click", (e) => {
           e.stopPropagation();
-          setSelected(null);
+          setSelectedId(null);
           setSelectedMe((on) => !on);
         });
         meMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: "bottom" })
@@ -466,7 +469,7 @@ export default function WorldMap({
                 </p>
                 <button
                   type="button"
-                  onClick={() => setSelected(null)}
+                  onClick={() => setSelectedId(null)}
                   className="mt-4 w-full rounded-lg bg-surface-container-high px-3 py-2 font-sans text-sm text-on-surface-variant transition hover:text-on-surface"
                 >
                   Close
@@ -495,7 +498,7 @@ export default function WorldMap({
                 <div className="mt-4 flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setSelected(null)}
+                    onClick={() => setSelectedId(null)}
                     className="flex-1 rounded-lg bg-surface-container-high px-3 py-2 font-sans text-sm text-on-surface-variant transition hover:text-on-surface"
                   >
                     Close
@@ -513,7 +516,7 @@ export default function WorldMap({
                     onClick={() => {
                       if (!selectedAvailable) return;
                       onPeerConnect(selected.id);
-                      setSelected(null);
+                      setSelectedId(null);
                     }}
                     className="flex-1 rounded-lg bg-primary-container px-3 py-2 font-sans text-sm font-medium text-on-primary shadow-[0_0_12px_rgba(16,185,129,0.3)] transition hover:bg-primary disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-outline disabled:shadow-none"
                   >

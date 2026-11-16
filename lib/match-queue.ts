@@ -11,7 +11,7 @@ import {
   type GenderPref,
   usersCanMatch,
 } from "@/lib/match";
-import { parseLanguageList, serializeLanguageList } from "@/lib/languages";
+import { serializeLanguageList } from "@/lib/languages";
 import { isGenderValue } from "@/lib/match";
 
 type PresenceRow = {

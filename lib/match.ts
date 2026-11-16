@@ -91,13 +91,13 @@ export interface MatchSkipFields {
  * After expire/decline, avoid immediately re-pairing the same duo when other
  * compatible searchers exist. If they are the only match for each other, allow it.
  */
-export function shouldDeferSkippedPair(
-  a: MatchSkipFields,
-  b: MatchSkipFields,
-  searchers: MatchSkipFields[],
+export function shouldDeferSkippedPair<T extends MatchSkipFields & MatchPrefs>(
+  a: T,
+  b: T,
+  searchers: T[],
   paired: Set<string>,
   canMatch: (x: MatchPrefs, y: MatchPrefs) => boolean,
-  prefs: (row: MatchSkipFields) => MatchPrefs,
+  prefs: (row: T) => MatchPrefs,
 ): boolean {
   const skipped =
     a.matchSkipPartnerId === b.id || b.matchSkipPartnerId === a.id;
