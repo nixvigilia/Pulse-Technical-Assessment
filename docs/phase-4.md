@@ -1,3 +1,8 @@
+- **Global Activity**
+  - Online users count
+  - Available users count
+  - Accepting users count
+
 - **User Preferences**
   - Spoken languages (multiple selections)
   - Your gender (optional): Man, Woman, Prefer not to say
@@ -9,4 +14,3 @@
   - Respect mutual gender preferences
   - Require both users to accept before connecting
   - Support cancel, decline, and match expiration
-

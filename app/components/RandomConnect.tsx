@@ -259,14 +259,16 @@ export default function RandomConnect({
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <PanelTitle match={match} />
-          <button
-            type="button"
-            disabled={busy && inQueue}
-            onClick={() => void handleClose()}
-            className="rounded-lg bg-surface-container-high px-3 py-1 font-sans text-[13px] text-on-surface-variant transition hover:text-on-surface disabled:opacity-50"
-          >
-            Close
-          </button>
+          {match.phase !== "searching" && (
+            <button
+              type="button"
+              disabled={busy && inQueue}
+              onClick={() => void handleClose()}
+              className="rounded-lg bg-surface-container-high px-3 py-1 font-sans text-[13px] text-on-surface-variant transition hover:text-on-surface disabled:opacity-50"
+            >
+              Close
+            </button>
+          )}
         </div>
 
         {match.phase === "pending" && (

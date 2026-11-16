@@ -515,8 +515,10 @@ export default function Home() {
         </div>
         <button
           type="button"
+          disabled={inChat}
+          title={inChat ? "End your chat to use Random" : undefined}
           onClick={() => setRandomOpen(true)}
-          className="shrink-0 rounded-full bg-primary-container px-4 py-1.5 font-sans text-[13px] font-medium text-on-primary shadow-[0_0_12px_rgba(16,185,129,0.3)] transition hover:bg-primary"
+          className="shrink-0 rounded-full bg-primary-container px-4 py-1.5 font-sans text-[13px] font-medium text-on-primary shadow-[0_0_12px_rgba(16,185,129,0.3)] transition hover:bg-primary disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:bg-primary-container"
         >
           Random
         </button>
