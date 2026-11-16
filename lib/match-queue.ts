@@ -422,7 +422,6 @@ export async function joinMatchQueue(
     gender?: string | null;
   },
 ): Promise<{ ok: boolean; error?: string }> {
-  const now = new Date();
   let row = await prisma.presence.findUnique({ where: { id } });
   if (!row) {
     return { ok: false, error: "not available" };
@@ -454,10 +453,6 @@ export async function joinMatchQueue(
     row.status === PRESENCE_STATUS.on_call
   ) {
     return { ok: false, error: "in a connection" };
-  }
-
-  if (row.matchCooldownUntil && row.matchCooldownUntil > now) {
-    return { ok: false, error: "cooldown" };
   }
 
   if (!hasSpokenLanguages(row.spokenLanguages)) {

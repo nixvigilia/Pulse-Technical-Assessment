@@ -58,7 +58,6 @@ export async function savePreferences(
 }
 
 const MATCH_ERROR_HINT: Record<string, string> = {
-  cooldown: "Please wait a moment before searching again.",
   "spoken languages required": "Select at least one spoken language.",
   "not available": "You cannot search right now — try again in a second.",
   "pending match": "Finish or cancel the current match offer first.",

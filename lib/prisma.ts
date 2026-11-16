@@ -8,7 +8,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 // invocations to avoid exhausting Postgres connections. Use a *pooled*
 // connection string for DATABASE_URL in production (PgBouncer / Neon pooler).
 /** Bump when Presence fields in `prisma/schema.prisma` change (after `prisma generate`). */
-const PRESENCE_CLIENT_GEN = 2;
+const PRESENCE_CLIENT_GEN = 3;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;

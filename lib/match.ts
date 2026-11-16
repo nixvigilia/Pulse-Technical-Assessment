@@ -5,7 +5,6 @@ export type GenderPref = "anyone" | "men" | "women";
 export type ConnectionMode = "text" | "text_video";
 
 export const MATCH_ACCEPT_MS = 20_000;
-export const MATCH_COOLDOWN_MS = 5_000;
 export const MATCH_JOIN_CAP = 30;
 
 export interface MatchPrefs {

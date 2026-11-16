@@ -1,0 +1,1 @@
+ALTER TABLE "Presence" DROP COLUMN IF EXISTS "matchCooldownUntil";
